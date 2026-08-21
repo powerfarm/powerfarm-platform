@@ -1,0 +1,92 @@
+name: Finalize full-base metadata
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize-full-base.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-full-base-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Put the Powerfarm base invariant where agents see it first
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! grep -q 'POWERFARM CANONICAL BASE INVARIANT' README.md; then
+            tmp="$(mktemp)"
+            cat > "$tmp" <<'EOF'
+          > [!IMPORTANT]
+          > **POWERFARM CANONICAL BASE INVARIANT:** this repository root is the complete pinned `cloudflare/cloudflare-os` source tree. `cloudflare-os-starter` is **not** the Powerfarm base, deployment source, or topology authority. Powerfarm-specific code lives under `powerfarm/`. The OLD repositories are backup/provenance only. Production follows `powerfarm/CLEAN-REINSTALL-CONTRACT.md`: inventory the old Worker installation, remove it, prove it is gone, and only then create the replacement Workers. Do not build a hybrid old/new topology.
+          >
+
+          EOF
+            cat README.md >> "$tmp"
+            mv "$tmp" README.md
+          fi
+
+          if ! grep -q 'POWERFARM CANONICAL BASE INVARIANT' AGENTS.md; then
+            tmp="$(mktemp)"
+            cat > "$tmp" <<'EOF'
+          # POWERFARM CANONICAL BASE INVARIANT
+
+          Before changing deployment, topology, packages, or architecture, treat these as hard constraints:
+
+          - The repository root is the complete pinned `cloudflare/cloudflare-os` source tree recorded in `powerfarm/source.json`.
+          - `cloudflare-os-starter` is not the Powerfarm base and must never be substituted for the complete source tree.
+          - Cloudflare OS must not be hidden behind a starter wrapper or git submodule.
+          - Powerfarm-specific extensions live under `powerfarm/`.
+          - OLD repositories are backup/provenance only, never runtime/build/deploy dependencies.
+          - Live Cloudflare residue is not a topology source of truth.
+          - For the production reset, deletion precedes creation: inventory the old Powerfarm Worker installation, remove it, prove absence, then create the replacement platform from this repository. Never adopt a live old Worker into the new baseline.
+          - Read `powerfarm/CLEAN-REINSTALL-CONTRACT.md` and `powerfarm/docs/architecture/rejected-paths.md` before production work.
+
+          The upstream Cloudflare OS agent guidance follows unchanged below.
+
+          EOF
+            cat AGENTS.md >> "$tmp"
+            mv "$tmp" AGENTS.md
+          fi
+
+      - name: Refresh combined workspace lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Re-prove source topology
+        run: node powerfarm/scripts/assert-clean-baseline.mjs
+
+      - name: Commit final metadata and lockfile if needed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add README.md AGENTS.md pnpm-lock.yaml
+          if git diff --cached --quiet; then
+            echo "full-base metadata already final"
+            exit 0
+          fi
+          git config user.name "powerfarm-baseline-bot"
+          git config user.email "powerfarm-baseline-bot@users.noreply.github.com"
+          git commit -m "chore: finalize full Cloudflare OS Powerfarm baseline"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
