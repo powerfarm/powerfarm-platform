@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   import:
-    if: github.repository == 'powerfarm/powerfarm-platform'
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -56,16 +56,13 @@ jobs:
           cp -a "$SRC/scripts" scripts
           cp -a "$SRC/state" state
 
+          # Generated outputs are rebuilt, never imported as canonical source.
           find packages -type d -name dist -prune -exec rm -rf {} +
           find packages -type f -name worker-configuration.d.ts -delete
 
+          # Production state belongs to the old Git history. Deployment stays disabled.
           rm -f state/ultimo-deploy.json
           rm -f scripts/deploy-workflow-token-contract.test.mjs
-          rm -f .github/workflows/deploy.yml
-          rm -f .github/workflows/drift.yml
-          rm -f .github/workflows/pr.yml
-          rm -f .github/workflows/starter-sync.yml
-          rm -f .github/workflows/upstream-bump.yml
 
           node --input-type=module <<'NODE'
           import { readFileSync, writeFileSync } from "node:fs";
@@ -91,48 +88,6 @@ jobs:
           }
           EOF
 
-      - name: Install non-deploying baseline CI
-        shell: bash
-        run: |
-          set -euo pipefail
-          cat > .github/workflows/baseline-ci.yml <<'EOF'
-          name: Baseline CI
-
-          on:
-            pull_request:
-            push:
-              branches:
-                - main
-                - baseline/cloudflare-os-bf7f762
-
-          permissions:
-            contents: read
-
-          jobs:
-            static:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-                  with:
-                    submodules: recursive
-                - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-                  with:
-                    node-version: 24
-                - run: corepack enable
-                - run: pnpm install --frozen-lockfile
-                - run: pnpm --dir cloudflare-os install --frozen-lockfile
-                - name: Powerfarm guards
-                  run: pnpm guards
-                - name: Deterministic tests
-                  run: pnpm test
-                - name: Full Wrangler dry-run
-                  run: pnpm check
-                - name: Patch hygiene
-                  run: git diff --check
-          EOF
-
-          rm -f .github/workflows/bootstrap-baseline.yml
-
       - name: Verify import boundary
         shell: bash
         run: |
@@ -142,11 +97,6 @@ jobs:
           test -f scripts/guards/check-upstream-source.mjs
           test -f state/esperado.json
           test ! -f state/ultimo-deploy.json
-          test ! -f .github/workflows/deploy.yml
-          test ! -f .github/workflows/drift.yml
-          test ! -f .github/workflows/pr.yml
-          test ! -f .github/workflows/starter-sync.yml
-          test ! -f .github/workflows/upstream-bump.yml
           test ! -f scripts/deploy-workflow-token-contract.test.mjs
           test ! -e packages/gatekeeper-identity/worker-configuration.d.ts
           test "$(git ls-files -s cloudflare-os | awk '{print $1":"$2}')" = "160000:bf7f762d7fa73553284d731ab6a978d3ea17be24"
@@ -158,6 +108,6 @@ jobs:
           set -euo pipefail
           git config user.name powerfarm-ci
           git config user.email ci@powerfarm.app
-          git add -A
+          git add -A -- . ':!.github/workflows'
           git commit -m "feat: import reviewed Powerfarm v0.1 source baseline"
           git push origin HEAD:baseline/cloudflare-os-bf7f762
