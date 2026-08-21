@@ -1,0 +1,204 @@
+name: Activate production baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - state/activation-request.json
+
+concurrency:
+  group: activate-production-baseline
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      activate: ${{ steps.state.outputs.activate }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: state
+        name: Check committed activation request
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from "node:fs";
+          const migration = JSON.parse(readFileSync("state/migration-source.json", "utf8"));
+          const request = JSON.parse(readFileSync("state/activation-request.json", "utf8"));
+          if (migration.productionDeployControllerEnabled !== false) {
+            throw new Error("steady-state deploy controller is already enabled; one-time activation is forbidden");
+          }
+          if (migration.productionBaselineActivated === true) {
+            console.error("Production baseline is already activated; nothing to do.");
+            console.log("activate=false");
+          } else if (request.requested === true) {
+            console.log("activate=true");
+          } else {
+            console.error("Activation request is disarmed; nothing to do.");
+            console.log("activate=false");
+          }
+          NODE
+
+  activate:
+    needs: gate
+    if: needs.gate.outputs.activate == 'true'
+    runs-on: ubuntu-latest
+    environment: producao
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - run: corepack enable
+
+      # No infrastructure credential exists in these steps.
+      - name: REGRA 0 - official Cloudflare OS upstream
+        run: node scripts/guards/check-upstream-source.mjs
+      - name: REGRA 0a - sealed official starter deploy library
+        run: node scripts/guards/check-starter-source.mjs
+      - run: pnpm install --frozen-lockfile
+      - name: REGRA 0b - Powerfarm platform contract
+        run: node scripts/guards/check-platform-contract.mjs
+      - run: pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: REGRA 2 - destructive migrations require approval
+        run: node scripts/guards/check-migrations.mjs
+      - name: Generate configs, run deterministic tests and full Wrangler dry-run
+        run: pnpm check
+      - name: Expected state matches generated configs
+        run: node scripts/derive-expected.mjs --check
+      - name: REGRA 3 - bindings contract
+        run: node scripts/guards/check-bindings.mjs
+      - name: REGRA 4 - admin contract
+        run: node scripts/guards/check-admins.mjs
+
+      - id: plan
+        name: Prove no runtime debt was added after the canonical baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANONICAL=$(node -e 'const x=require("./state/production-activation-plan.json"); process.stdout.write(x.canonicalRuntimeBaselineCommit)')
+          TARGET=$(node -e 'const x=require("./state/production-activation-plan.json"); process.stdout.write(x.target)')
+          WORKER=$(node -e 'const x=require("./state/production-activation-plan.json"); process.stdout.write(x.targetWorker)')
+          git merge-base --is-ancestor "$CANONICAL" HEAD
+          EXTRA=$(node scripts/select-deploy-targets.mjs --base "$CANONICAL" --head "$GITHUB_SHA")
+          if [ "$EXTRA" != "none" ]; then
+            echo "Runtime changed after canonical baseline: $EXTRA" >&2
+            exit 1
+          fi
+          test "$TARGET" = "identity"
+          test "$WORKER" = "powerfarm-gk-identity"
+          echo "canonical=$CANONICAL" >> "$GITHUB_OUTPUT"
+          echo "worker=$WORKER" >> "$GITHUB_OUTPUT"
+
+      - id: edge
+        name: Resolve public edge from deployment source
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL=$(node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { parse } from "jsonc-parser";
+          const cfg = parse(await readFile("deployment.jsonc", "utf8"), [], { allowTrailingComma: true });
+          const domain = cfg?.workers?.router?.route?.customDomain;
+          if (!domain || typeof domain !== "string") throw new Error("router customDomain is not declared");
+          process.stdout.write(`https://${domain.replace(/^https?:\/\//, "")}`);
+          NODE
+          )
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "public edge: $URL"
+
+      - name: Prove this activation still targets the current main head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CURRENT=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          test "$CURRENT" = "$GITHUB_SHA"
+
+      # Read-only proof. No write token has been exposed yet.
+      - name: Prove live versions still equal the last observed legacy production baseline
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/verify-legacy-production.mjs --out versoes-antes.json
+
+      - name: REGRA 1 - all non-Identity Workers match the canonical topology
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/check-drift.mjs --esperado state/esperado.json --ignore-workers "${{ steps.plan.outputs.worker }}"
+
+      # First and only production write before the durable Git anchor.
+      - id: deploy
+        name: Deploy only the outstanding Identity receiver fix
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: pnpm --dir packages/gatekeeper-identity exec wrangler deploy --config wrangler.prod.jsonc
+
+      - id: versions
+        name: Prove only Identity changed version
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+        run: node scripts/verify-versions.mjs --antes versoes-antes.json --changed-workers "${{ steps.plan.outputs.worker }}"
+
+      - id: smoke
+        name: Prove public edge after activation
+        run: node scripts/smoke-test.mjs "${{ steps.edge.outputs.url }}"
+
+      # The Git anchor is part of the transaction. If this fails, rollback below
+      # restores Identity so production is never left ahead of durable truth.
+      - id: anchor
+        name: Record the new-history production anchor, but keep continuous deploy disabled
+        if: success()
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
+          GH_PUSH_TOKEN: ${{ github.token }}
+          CANONICAL_RUNTIME_COMMIT: ${{ steps.plan.outputs.canonical }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          GITHUB_SHA="$CANONICAL_RUNTIME_COMMIT" node scripts/record-versions.mjs --out state/ultimo-deploy.json
+          node scripts/finalize-production-activation.mjs
+          node scripts/check-production-migration-state.mjs
+          git config user.name powerfarm-ci
+          git config user.email ci@powerfarm.app
+          git add state/migration-source.json state/activation-request.json state/ultimo-deploy.json
+          git commit -m "chore: anchor canonical production baseline"
+          git push "https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+
+      - id: rollback
+        name: Recover Identity if any post-write proof or durable anchoring failed
+        if: failure() && steps.deploy.conclusion != 'skipped'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PUBLIC_URL: ${{ steps.edge.outputs.url }}
+        run: node scripts/rollback.mjs --from versoes-antes.json --only-workers "${{ steps.plan.outputs.worker }}" --verify
+
+      - name: Open incident only if automatic recovery itself failed
+        if: failure() && steps.rollback.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "INCIDENTE: ativação do baseline falhou em ${GITHUB_SHA::7}" \
+            --body "A ativação one-shot do baseline falhou e o rollback automático da Identity não confirmou recuperação. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"

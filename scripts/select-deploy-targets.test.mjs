@@ -50,28 +50,37 @@ test("docs and workflow-only edits do not redeploy Workers", () => {
   );
 });
 
-test("deploy controller state is explicit and safe", async () => {
+test("migration state keeps activation and steady-state deployment separate", async () => {
   const migration = JSON.parse(
     await readFile(resolve(root, "state/migration-source.json"), "utf8"),
   );
   const workflowPath = resolve(root, ".github/workflows/deploy.yml");
   const statePath = resolve(root, "state/ultimo-deploy.json");
 
-  if (migration.productionDeployControllerEnabled === false) {
+  assert.equal(typeof migration.productionBaselineActivated, "boolean");
+  assert.equal(typeof migration.productionDeployControllerEnabled, "boolean");
+
+  if (!migration.productionDeployControllerEnabled) {
     assert.equal(await isMissing(workflowPath), true,
-      "deploy.yml must stay absent while the new repository is not the production controller");
-    assert.equal(await isMissing(statePath), true,
-      "ultimo-deploy.json must be re-anchored in the new Git history before enabling deploys");
+      "steady-state deploy.yml must stay absent while the controller is disabled");
+
+    if (!migration.productionBaselineActivated) {
+      assert.equal(await isMissing(statePath), true,
+        "ultimo-deploy.json must stay absent until one-time production activation succeeds");
+    } else {
+      assert.equal(await isMissing(statePath), false,
+        "activated production baseline must have a new-history ultimo-deploy.json");
+    }
     return;
   }
 
-  assert.equal(migration.productionDeployControllerEnabled, true,
-    "productionDeployControllerEnabled must be an explicit boolean");
+  assert.equal(migration.productionBaselineActivated, true,
+    "steady-state deploy cannot be enabled before the new production baseline is activated");
 
   const workflow = await readFile(workflowPath, "utf8");
   const state = JSON.parse(await readFile(statePath, "utf8"));
-  assert.equal(typeof state.commit, "string");
-  assert.ok(state.commit.length >= 40, "deployment anchor must contain a Git commit SHA");
+  assert.match(state.commit ?? "", /^[0-9a-f]{40}$/i,
+    "deployment anchor must contain a Git commit SHA");
   assert.match(workflow, /LAST=.*state\/ultimo-deploy\.json/);
   assert.match(workflow, /select-deploy-targets\.mjs --base "\$LAST" --head/);
   assert.doesNotMatch(workflow, /select-deploy-targets\.mjs --base '\$\{\{ github\.event\.before \}\}'/);

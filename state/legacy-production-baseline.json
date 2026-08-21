@@ -1,0 +1,40 @@
+{
+  "kind": "historical-production-evidence",
+  "sourceRepository": "powerfarm/OLD-platform-NAO-USAR-os",
+  "sourceCommit": "60f3f34097a38a29eac6fd91ef6e5fa0958d23d4",
+  "observedAt": "2026-08-21T08:17:35Z",
+  "workers": {
+    "powerfarm-backend": {
+      "deploymentId": "f0232ba6-845d-4f93-b095-43d6eaf33736",
+      "versionId": "c1c179f7-263b-4867-96e7-fff7834d5ccc"
+    },
+    "powerfarm": {
+      "deploymentId": "5a114b0d-1813-49a4-b1ff-ebab68885efc",
+      "versionId": "15334524-9e11-487c-b1a3-22ac2d42a2ae"
+    },
+    "powerfarm-gk-context": {
+      "deploymentId": "6d60d2a4-0d0f-42fb-9a7d-db3b6718edb5",
+      "versionId": "a387cfe8-2d11-4aa3-a873-4c4eeb3b24db"
+    },
+    "powerfarm-gk-scheduler": {
+      "deploymentId": "175de8f3-3130-4886-806a-71ab42237609",
+      "versionId": "839c864c-d2ce-4453-8d4e-74c926f2256b"
+    },
+    "powerfarm-gk-custom": {
+      "deploymentId": "7a3bc5c9-619a-4358-8e32-6668ab4cfced",
+      "versionId": "34afa80e-49ca-4e55-919e-18653e4f08c3"
+    },
+    "powerfarm-gk-identity": {
+      "deploymentId": "952d69ca-aced-479e-9a44-8fed10fc197a",
+      "versionId": "a70ed8e6-8566-412d-bada-001ac54338b1"
+    },
+    "powerfarm-engine": {
+      "deploymentId": "76ca09bc-ef6f-46d9-a0e0-38912606baca",
+      "versionId": "fd3abaa1-989b-47d6-8fc3-0ebf049ea64a"
+    },
+    "powerfarm-error-reporter": {
+      "deploymentId": "33010d4a-709a-4e51-988c-ef83cfab5a76",
+      "versionId": "915937c2-96ca-4e66-af97-a99a982d9df4"
+    }
+  }
+}

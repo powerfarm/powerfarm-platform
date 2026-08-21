@@ -50,9 +50,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f state/migration-source.json
-          test ! -f state/ultimo-deploy.json
-          test "$(node -e 'const x=require("./state/migration-source.json"); process.stdout.write(String(x.productionDeployControllerEnabled))')" = "false"
+          node scripts/check-production-migration-state.mjs
           test "$(git ls-files -s cloudflare-os | awk '{print $1":"$2}')" = "160000:bf7f762d7fa73553284d731ab6a978d3ea17be24"
           test -z "$(git ls-files 'packages/*/dist/**' 'packages/*/worker-configuration.d.ts')"
       - name: Patch hygiene
