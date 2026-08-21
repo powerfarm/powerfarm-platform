@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+const EXPECTED_UPSTREAM_COMMIT = 'b1d875034170379300e924e6fea2280852afee73';
+
 const expectedCoreWorkers = [
   'gatekeeper-cloudflare',
   'gatekeeper-confluence',
@@ -40,8 +42,12 @@ if (JSON.stringify(actualCoreWorkers) !== JSON.stringify(expectedCoreWorkers)) {
 for (const forbidden of [
   '.gitmodules',
   'cloudflare-os',
-  'state/ultimo-deploy.json',
   'deployment.jsonc',
+  'state/ultimo-deploy.json',
+  'scripts/deploy.mjs',
+  'scripts/deploy-powerfarm.mjs',
+  'scripts/derive-expected.mjs',
+  'scripts/check-production-migration-state.mjs',
 ]) {
   if (existsSync(forbidden)) {
     throw new Error(`forbidden starter/legacy wrapper artifact at repository root: ${forbidden}`);
@@ -51,6 +57,9 @@ for (const forbidden of [
 const source = JSON.parse(readFileSync('powerfarm/source.json', 'utf8'));
 if (source.canonicalBase?.repository !== 'cloudflare/cloudflare-os') {
   throw new Error('canonical base must be cloudflare/cloudflare-os');
+}
+if (source.canonicalBase?.commit !== EXPECTED_UPSTREAM_COMMIT) {
+  throw new Error(`canonical upstream pin must be ${EXPECTED_UPSTREAM_COMMIT}`);
 }
 if (source.canonicalBase?.layout !== 'full-repository-root') {
   throw new Error('Cloudflare OS must occupy the repository root');
@@ -76,6 +85,20 @@ for (const required of [
 ]) {
   if (!deploymentText.includes(required)) {
     throw new Error(`missing clean-install deployment invariant: ${required}`);
+  }
+}
+
+const expectedExtensionNames = new Map([
+  ['powerfarm/custom-gatekeeper/wrangler.jsonc', 'powerfarm-gk-custom'],
+  ['powerfarm/error-reporter/wrangler.jsonc', 'powerfarm-error-reporter'],
+  ['powerfarm/gatekeeper-identity/wrangler.jsonc', 'powerfarm-gk-identity'],
+  ['powerfarm/engine/wrangler.jsonc', 'powerfarm-engine'],
+]);
+
+for (const [path, expectedName] of expectedExtensionNames) {
+  const text = readFileSync(path, 'utf8');
+  if (!text.includes(`"name": "${expectedName}"`)) {
+    throw new Error(`${path} must keep canonical Worker name ${expectedName}`);
   }
 }
 
@@ -115,6 +138,31 @@ if (/service[_-]?role/i.test(engineWrangler)) {
   throw new Error('Powerfarm Engine Wrangler config must not contain a Supabase service-role credential');
 }
 
+const registryClient = readFileSync('powerfarm/gatekeeper-identity/src/registry-client.ts', 'utf8');
+if (!registryClient.includes('const runtimeFetch: FetchFunction = (input, init) => fetch(input, init);')) {
+  throw new Error('Identity must preserve the receiver-safe Cloudflare runtime fetch wrapper');
+}
+if (!registryClient.includes('private readonly fetcher: FetchFunction = runtimeFetch')) {
+  throw new Error('Identity RegistryClient default fetcher must use runtimeFetch, never an unbound global fetch reference');
+}
+
+const runtimeFilesToCheckForStarterLeak = [
+  'powerfarm/custom-gatekeeper/src/custom.ts',
+  'powerfarm/custom-gatekeeper/package.json',
+  'powerfarm/custom-gatekeeper/wrangler.jsonc',
+  'powerfarm/error-reporter/package.json',
+  'powerfarm/error-reporter/wrangler.jsonc',
+  'powerfarm/gatekeeper-identity/package.json',
+  'powerfarm/gatekeeper-identity/wrangler.jsonc',
+  'powerfarm/engine/package.json',
+  'powerfarm/engine/wrangler.jsonc',
+];
+for (const path of runtimeFilesToCheckForStarterLeak) {
+  if (readFileSync(path, 'utf8').includes('cloudflare-os-starter')) {
+    throw new Error(`starter reference leaked into canonical Powerfarm runtime/config: ${path}`);
+  }
+}
+
 for (const generated of [
   'powerfarm/custom-gatekeeper/worker-configuration.d.ts',
   'powerfarm/error-reporter/worker-configuration.d.ts',
@@ -127,5 +175,5 @@ for (const generated of [
 }
 
 console.log(
-  `clean baseline OK: ${actualCoreWorkers.length} full Cloudflare OS core Workers + Powerfarm extensions; starter/submodule/live-deployment reuse forbidden`,
+  `clean baseline OK: ${actualCoreWorkers.length} full Cloudflare OS core Workers + ${expectedExtensionNames.size} Powerfarm extension Workers; starter/submodule/live-deployment reuse forbidden`,
 );
