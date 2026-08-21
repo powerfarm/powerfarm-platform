@@ -178,6 +178,7 @@ jobs:
           set -euo pipefail
           GITHUB_SHA="$CANONICAL_RUNTIME_COMMIT" node scripts/record-versions.mjs --out state/ultimo-deploy.json
           node scripts/finalize-production-activation.mjs
+          node scripts/check-production-migration-state.mjs
           git config user.name powerfarm-ci
           git config user.email ci@powerfarm.app
           git add state/migration-source.json state/activation-request.json state/ultimo-deploy.json
