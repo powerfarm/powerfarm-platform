@@ -13,8 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  issues: write
+  contents: read
 
 jobs:
   gate:
@@ -53,6 +52,9 @@ jobs:
     if: needs.gate.outputs.activate == 'true'
     runs-on: ubuntu-latest
     environment: producao
+    permissions:
+      contents: write
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -120,6 +122,13 @@ jobs:
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "public edge: $URL"
 
+      - name: Prove this activation still targets the current main head
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --quiet origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+
       # Read-only proof. No write token has been exposed yet.
       - name: Prove live versions still equal the last observed legacy production baseline
         env:
@@ -133,7 +142,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/check-drift.mjs --esperado state/esperado.json --ignore-workers "${{ steps.plan.outputs.worker }}"
 
-      # First and only production write in the activation path.
+      # First and only production write before the durable Git anchor.
       - id: deploy
         name: Deploy only the outstanding Identity receiver fix
         env:
@@ -152,25 +161,10 @@ jobs:
         name: Prove public edge after activation
         run: node scripts/smoke-test.mjs "${{ steps.edge.outputs.url }}"
 
-      - id: rollback
-        name: Recover Identity if activation write did not prove healthy
-        if: failure() && steps.deploy.conclusion != 'skipped'
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PUBLIC_URL: ${{ steps.edge.outputs.url }}
-        run: node scripts/rollback.mjs --from versoes-antes.json --only-workers "${{ steps.plan.outputs.worker }}" --verify
-
-      - name: Open incident only if automatic recovery itself failed
-        if: failure() && steps.rollback.outcome == 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --title "INCIDENTE: ativação do baseline falhou em ${GITHUB_SHA::7}" \
-            --body "A ativação one-shot do baseline falhou e o rollback automático da Identity não confirmou recuperação. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-
-      - name: Record the new-history production anchor, but keep continuous deploy disabled
+      # The Git anchor is part of the transaction. If this fails, rollback below
+      # restores Identity so production is never left ahead of durable truth.
+      - id: anchor
+        name: Record the new-history production anchor, but keep continuous deploy disabled
         if: success()
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -213,3 +207,21 @@ jobs:
           git add state/migration-source.json state/activation-request.json state/ultimo-deploy.json
           git commit -m "chore: anchor canonical production baseline"
           git push "https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
+
+      - id: rollback
+        name: Recover Identity if any post-write proof or durable anchoring failed
+        if: failure() && steps.deploy.conclusion != 'skipped'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PUBLIC_URL: ${{ steps.edge.outputs.url }}
+        run: node scripts/rollback.mjs --from versoes-antes.json --only-workers "${{ steps.plan.outputs.worker }}" --verify
+
+      - name: Open incident only if automatic recovery itself failed
+        if: failure() && steps.rollback.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "INCIDENTE: ativação do baseline falhou em ${GITHUB_SHA::7}" \
+            --body "A ativação one-shot do baseline falhou e o rollback automático da Identity não confirmou recuperação. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
