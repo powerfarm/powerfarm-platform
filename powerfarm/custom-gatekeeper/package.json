@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "types": "node ../../scripts/generate-worker-types.mjs src/index.ts",
+    "types": "node ../scripts/generate-worker-types.mjs src/index.ts",
     "build": "pnpm types && tsc",
     "types:check": "pnpm types && tsc --noEmit",
     "test": "vitest run"
