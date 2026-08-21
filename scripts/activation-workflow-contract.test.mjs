@@ -45,7 +45,9 @@ test("activation workflow is one-shot, Identity-only, and preserves credential b
 
   assert.match(workflow, /select-deploy-targets\.mjs --base "\$CANONICAL" --head "\$GITHUB_SHA"/);
   assert.match(workflow, /if \[ "\$EXTRA" != "none" \]/);
-  assert.match(workflow, /test "\$\(git rev-parse origin\/main\)" = "\$GITHUB_SHA"/);
+  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}[\s\S]*gh api "repos\/\$\{GITHUB_REPOSITORY\}\/commits\/main" --jq \.sha/);
+  assert.match(workflow, /test "\$CURRENT" = "\$GITHUB_SHA"/);
+  assert.doesNotMatch(workflow, /git fetch --quiet origin main/);
   assert.match(workflow, /GITHUB_SHA="\$CANONICAL_RUNTIME_COMMIT" node scripts\/record-versions\.mjs/);
   assert.match(workflow, /node scripts\/finalize-production-activation\.mjs/);
 });
