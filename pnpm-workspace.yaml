@@ -1,0 +1,12 @@
+packages:
+  - cloudflare-os/packages/workshop-shared
+  - cloudflare-os/packages/error-reporting
+  - packages/*
+
+allowBuilds:
+  '@google/genai': false
+  esbuild: true
+  protobufjs: false
+  sharp: true
+  sqlite3: false
+  workerd: true

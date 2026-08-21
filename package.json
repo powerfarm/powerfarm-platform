@@ -1,0 +1,21 @@
+{
+  "name": "powerfarm-platform",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "test": "node --test scripts/*.test.mjs && pnpm --filter custom-gatekeeper test && pnpm --filter error-reporter test && pnpm --filter gatekeeper-identity test && pnpm --filter @powerfarm/engine test",
+    "check": "node scripts/deploy-powerfarm.mjs --check",
+    "deploy": "node scripts/deploy-powerfarm.mjs",
+    "guards": "node scripts/guards/check-upstream-source.mjs && node scripts/guards/check-starter-source.mjs && node scripts/guards/check-platform-contract.mjs && node scripts/guards/check-migrations.mjs && node scripts/derive-expected.mjs --check && node scripts/guards/check-bindings.mjs && node scripts/guards/check-admins.mjs",
+    "drift": "node scripts/check-drift.mjs",
+    "esperado": "node scripts/derive-expected.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.20.1",
+    "jsonc-parser": "^3.3.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.115.0"
+  }
+}

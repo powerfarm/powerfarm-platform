@@ -1,0 +1,77 @@
+// PowerFarm — controles de deploy.
+//
+// Autenticação: a que vem no upstream (conta com usuário e senha, servida pela
+// própria página do PowerFarm). Sem Cloudflare Access, sem OAuth app, sem
+// cloudflareaccess.com na frente do usuário. Marca e cores são no /admin.
+{
+  "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
+
+  "auth": { "mode": "password" },
+
+  "workers": {
+    "workshop":         { "name": "powerfarm-backend" },
+    "router":           { "name": "powerfarm",
+                          "route": { "customDomain": "powerfarm.app" } },
+    "context":          { "name": "powerfarm-gk-context" },
+    "scheduler":        { "name": "powerfarm-gk-scheduler" },
+    "customGatekeeper": { "name": "powerfarm-gk-custom" },
+    "identity":         { "name": "powerfarm-gk-identity" },
+    "engine":           { "name": "powerfarm-engine",
+                          "route": { "workersDev": false } },
+    "errorReporter":    { "name": "powerfarm-error-reporter" }
+  },
+
+  // pf.engine v0.1 is a separate disposable placement, deliberately not mixed
+  // into the current public Router. The publishable key is supplied as the
+  // named Worker secret; caller JWTs only arrive per request.
+  "agenticRuntime": {
+    "supabaseUrl": "https://wmsrqefgdgcijupeogfa.supabase.co",
+    "supabasePublishableKeySecret": "SUPABASE_PUBLISHABLE_KEY",
+    "workersAiModel": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+
+  // Ligar só depois do primeiro deploy verde. É o caminho de código menos rodado daqui.
+  "deploy": { "twoPhase": false },
+
+  // Quem entra no /admin. Protegido pela REGRA 4.
+  "admins": ["danvoulez", "dan@powerfarm.app"],
+  // Login por senha identifica por USERNAME, nao por email. "danvoulez" e a
+  // conta real; o email fica para quando houver login por provedor.
+
+  // Plataforma usa Cloudflare AI Gateway como caminho padrao de IA.
+  // Golden Bridge fica fora do hot path da plataforma e pode continuar como
+  // infraestrutura separada de inferencia/Foundry. O Worker exige o secret
+  // CF_AI_GATEWAY_API_TOKEN e envia Workers AI pelo gateway "powerfarm-ai".
+  "aiGateway": {
+    "enabled": true,
+    "name": "powerfarm-ai",
+    "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
+    "providers": ["cloudflare"],
+    "workersAi": { "mode": "direct" }
+  },
+
+  "context": { "sharingDomain": "production", "kvNamespaceId": "2726f4db978249a6aa7cccee6ccdcf67" },
+
+  "customGatekeeper": {
+    "name": "PowerFarm",
+    "message": "Regras e contexto do PowerFarm para agentes desta instância."
+  },
+
+  "errorReporting": { "enabled": true, "environment": "production", "release": null },
+
+  // KV: null = wrangler cria e reconecta sozinho nos deploys seguintes.
+  // R2: bucket reusado. Ele sobreviveu à limpeza por não estar vazio; como o
+  // índice em KV foi apagado, o OS reinstala os format blueprints por cima e os
+  // objetos antigos ficam sem referência. Reusar evita deixar um bucket órfão.
+  "resources": {
+    "blueprintsKvNamespaceId": "a24df214ae00404c9c75c3029ba72e87",
+    "avatarsKvNamespaceId": "c302d198a6a0482ab1523b8734fc2f73",
+    "blueprintContentBucket": "powerfarm-blueprint-content"
+  },
+
+  "observability": {
+    "enabled": true, "headSamplingRate": 1,
+    "logs": { "invocationLogs": false },
+    "traces": { "enabled": false, "headSamplingRate": 0.1 }
+  }
+}

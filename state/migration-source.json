@@ -1,0 +1,7 @@
+{
+  "legacyRepository": "powerfarm/OLD-platform-NAO-USAR-os",
+  "legacySnapshot": "350dc661bdd1c4d831e5eb1f6b9224a9050de88e",
+  "cloudflareOsRepository": "cloudflare/cloudflare-os",
+  "cloudflareOsCommit": "bf7f762d7fa73553284d731ab6a978d3ea17be24",
+  "productionDeployControllerEnabled": false
+}

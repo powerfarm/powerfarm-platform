@@ -1,0 +1,29 @@
+apiVersion: powerfarm.app/v1alpha1
+kind: Gadget
+metadata:
+  id: hello-agentic
+  version: 0.1.0
+spec:
+  agentic:
+    runtime: adk-js
+  agents:
+    assistant:
+      model:
+        capability: model
+      instruction: >
+        Help the user complete the task. If essential information is missing,
+        use adk_request_input once and continue after the user responds.
+      capabilities:
+        - model
+        - input
+  flows:
+    default:
+      sequence:
+        - agent: assistant
+  capabilities:
+    model:
+      kind: model
+      target: workers-ai
+    input:
+      kind: input
+      target: user
