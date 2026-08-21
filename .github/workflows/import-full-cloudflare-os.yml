@@ -6,6 +6,11 @@ on:
       - baseline/full-cloudflare-os-clean
     paths:
       - .github/workflows/import-full-cloudflare-os.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/import-full-cloudflare-os.yml
 
 permissions:
   contents: write
@@ -25,6 +30,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Preserve reviewed Powerfarm layer
         shell: bash
@@ -111,7 +117,6 @@ jobs:
             powerfarm/engine/tsconfig.json
           sed -i 's#"$schema": "node_modules/wrangler/config-schema.json"#"$schema": "../../node_modules/wrangler/config-schema.json"#' powerfarm/engine/wrangler.jsonc
 
-          # Align the two Powerfarm gatekeepers with the full upstream RPC toolchain.
           node <<'NODE'
           const fs = require('fs');
           for (const path of ['powerfarm/custom-gatekeeper/package.json', 'powerfarm/gatekeeper-identity/package.json']) {
@@ -127,7 +132,6 @@ jobs:
           }
           NODE
 
-          # Canonical Worker identities are explicit in source now. No starter-generated rename step.
           node <<'NODE'
           const fs = require('fs');
           function replace(path, from, to) {
@@ -278,31 +282,17 @@ EOF
           import { join } from 'node:path';
 
           const expected = [
-            'gatekeeper-cloudflare',
-            'gatekeeper-confluence',
-            'gatekeeper-context',
-            'gatekeeper-email',
-            'gatekeeper-github',
-            'gatekeeper-google',
-            'gatekeeper-homeassistant',
-            'gatekeeper-linear',
-            'gatekeeper-mcp',
-            'gatekeeper-mcp-portal',
-            'gatekeeper-notion',
-            'gatekeeper-scheduler',
-            'gatekeeper-slack',
-            'gatekeeper-spotify',
-            'gatekeeper-supabase',
-            'gatekeeper-zoominfo',
-            'router',
-            'workshop-backend',
+            'gatekeeper-cloudflare', 'gatekeeper-confluence', 'gatekeeper-context', 'gatekeeper-email',
+            'gatekeeper-github', 'gatekeeper-google', 'gatekeeper-homeassistant', 'gatekeeper-linear',
+            'gatekeeper-mcp', 'gatekeeper-mcp-portal', 'gatekeeper-notion', 'gatekeeper-scheduler',
+            'gatekeeper-slack', 'gatekeeper-spotify', 'gatekeeper-supabase', 'gatekeeper-zoominfo',
+            'router', 'workshop-backend',
           ];
 
           const actual = readdirSync('packages', { withFileTypes: true })
             .filter((entry) => entry.isDirectory() && existsSync(join('packages', entry.name, 'wrangler.jsonc')))
             .map((entry) => entry.name)
             .sort();
-
           const want = [...expected].sort();
           if (JSON.stringify(actual) !== JSON.stringify(want)) {
             throw new Error(`full Cloudflare OS core drift: expected ${want.length} deployable Workers, found ${actual.length}\nexpected=${want.join(',')}\nactual=${actual.join(',')}`);
