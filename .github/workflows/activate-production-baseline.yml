@@ -123,11 +123,13 @@ jobs:
           echo "public edge: $URL"
 
       - name: Prove this activation still targets the current main head
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          git fetch --quiet origin main
-          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          CURRENT=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
+          test "$CURRENT" = "$GITHUB_SHA"
 
       # Read-only proof. No write token has been exposed yet.
       - name: Prove live versions still equal the last observed legacy production baseline
