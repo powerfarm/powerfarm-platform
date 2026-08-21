@@ -1,0 +1,408 @@
+name: Import full Cloudflare OS baseline
+
+on:
+  push:
+    branches:
+      - baseline/full-cloudflare-os-clean
+    paths:
+      - .github/workflows/import-full-cloudflare-os.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/import-full-cloudflare-os.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-full-cloudflare-os
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_REPOSITORY: cloudflare/cloudflare-os
+      UPSTREAM_COMMIT: b1d875034170379300e924e6fea2280852afee73
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - name: Preserve reviewed Powerfarm layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/powerfarm-overlay
+          mkdir -p /tmp/powerfarm-overlay
+          keep() {
+            local src="$1"
+            local dst="/tmp/powerfarm-overlay/$1"
+            if [[ -e "$src" ]]; then
+              mkdir -p "$(dirname "$dst")"
+              cp -a "$src" "$dst"
+            fi
+          }
+          keep packages/custom-gatekeeper
+          keep packages/error-reporter
+          keep packages/gatekeeper-identity
+          keep packages/powerfarm-engine
+          keep examples/gadgets/hello-agentic
+          keep docs/architecture
+          keep docs/adr/0001-stateless-compute-durable-truth.md
+          keep docs/adk-js-cloudflare-compatibility.md
+          keep docs/powerfarm-v0.1-platform-proof.md
+          keep docs/superpowers/plans/2026-08-19-powerfarm-v0.1-vertical-slice.md
+
+      - name: Fetch exact full upstream source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/cloudflare-os-upstream
+          git clone --quiet https://github.com/${UPSTREAM_REPOSITORY}.git /tmp/cloudflare-os-upstream
+          git -C /tmp/cloudflare-os-upstream checkout --quiet "$UPSTREAM_COMMIT"
+          test "$(git -C /tmp/cloudflare-os-upstream rev-parse HEAD)" = "$UPSTREAM_COMMIT"
+
+      - name: Replace repository root with full Cloudflare OS
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          rsync -a --exclude=.git /tmp/cloudflare-os-upstream/ ./
+          test -f packages/router/wrangler.jsonc
+          test -f packages/workshop-backend/wrangler.jsonc
+          test ! -e .gitmodules
+          test ! -e cloudflare-os
+
+      - name: Restore Powerfarm as an extension layer, not a starter wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p powerfarm
+          cp -a /tmp/powerfarm-overlay/packages/custom-gatekeeper powerfarm/custom-gatekeeper
+          cp -a /tmp/powerfarm-overlay/packages/error-reporter powerfarm/error-reporter
+          cp -a /tmp/powerfarm-overlay/packages/gatekeeper-identity powerfarm/gatekeeper-identity
+          cp -a /tmp/powerfarm-overlay/packages/powerfarm-engine powerfarm/engine
+
+          mkdir -p powerfarm/examples/gadgets
+          cp -a /tmp/powerfarm-overlay/examples/gadgets/hello-agentic powerfarm/examples/gadgets/hello-agentic
+
+          mkdir -p powerfarm/docs
+          if [[ -d /tmp/powerfarm-overlay/docs/architecture ]]; then
+            cp -a /tmp/powerfarm-overlay/docs/architecture powerfarm/docs/architecture
+          fi
+          if [[ -d /tmp/powerfarm-overlay/docs/adr ]]; then
+            cp -a /tmp/powerfarm-overlay/docs/adr powerfarm/docs/adr
+          fi
+          for f in adk-js-cloudflare-compatibility.md powerfarm-v0.1-platform-proof.md; do
+            if [[ -f "/tmp/powerfarm-overlay/docs/$f" ]]; then
+              cp -a "/tmp/powerfarm-overlay/docs/$f" "powerfarm/docs/$f"
+            fi
+          done
+          if [[ -f /tmp/powerfarm-overlay/docs/superpowers/plans/2026-08-19-powerfarm-v0.1-vertical-slice.md ]]; then
+            mkdir -p powerfarm/docs/plans
+            cp -a /tmp/powerfarm-overlay/docs/superpowers/plans/2026-08-19-powerfarm-v0.1-vertical-slice.md powerfarm/docs/plans/
+          fi
+
+          find powerfarm -type d \( -name dist -o -name .wrangler \) -prune -exec rm -rf {} +
+          find powerfarm -type f -name worker-configuration.d.ts -delete
+
+          sed -i 's#../../cloudflare-os/tsconfig.json#../../tsconfig.json#g' \
+            powerfarm/custom-gatekeeper/tsconfig.json \
+            powerfarm/error-reporter/tsconfig.json \
+            powerfarm/gatekeeper-identity/tsconfig.json \
+            powerfarm/engine/tsconfig.json
+          sed -i 's#"$schema": "node_modules/wrangler/config-schema.json"#"$schema": "../../node_modules/wrangler/config-schema.json"#' powerfarm/engine/wrangler.jsonc
+
+          node <<'NODE'
+          const fs = require('fs');
+          for (const path of ['powerfarm/custom-gatekeeper/package.json', 'powerfarm/gatekeeper-identity/package.json']) {
+            const p = JSON.parse(fs.readFileSync(path, 'utf8'));
+            p.dependencies.capnweb = 'catalog:';
+            p.dependencies['capnweb-validate'] = 'catalog:';
+            p.devDependencies.typescript = 'catalog:';
+            p.devDependencies.vite = 'catalog:';
+            p.devDependencies.vitest = 'catalog:';
+            p.devDependencies.wrangler = 'catalog:';
+            if (p.devDependencies['@cloudflare/vitest-pool-workers']) p.devDependencies['@cloudflare/vitest-pool-workers'] = 'catalog:';
+            fs.writeFileSync(path, JSON.stringify(p, null, 2) + '\n');
+          }
+          NODE
+
+          node <<'NODE'
+          const fs = require('fs');
+          function replace(path, from, to) {
+            const s = fs.readFileSync(path, 'utf8');
+            if (!s.includes(from)) throw new Error(`${path}: expected ${from}`);
+            fs.writeFileSync(path, s.replace(from, to));
+          }
+          replace('powerfarm/custom-gatekeeper/wrangler.jsonc', '"name": "custom-gatekeeper"', '"name": "powerfarm-gk-custom"');
+          replace('powerfarm/custom-gatekeeper/wrangler.jsonc', '"CUSTOM_NAME": "Example organization"', '"CUSTOM_NAME": "PowerFarm"');
+          replace('powerfarm/custom-gatekeeper/wrangler.jsonc', '"CUSTOM_MESSAGE": "Replace this with information useful to your organization."', '"CUSTOM_MESSAGE": "Regras e contexto do PowerFarm para agentes desta instancia."');
+          replace('powerfarm/error-reporter/wrangler.jsonc', '"name": "error-reporter"', '"name": "powerfarm-error-reporter"');
+          replace('powerfarm/engine/wrangler.jsonc', 'https://replace-from-deployment-config.supabase.co', 'https://wmsrqefgdgcijupeogfa.supabase.co');
+          NODE
+
+      - name: Add Powerfarm workspace packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i '/^  - packages\/\*$/a\  - powerfarm/*' pnpm-workspace.yaml
+          cat >> .gitignore <<'EOF'
+
+# Powerfarm extension generated artifacts are never source.
+powerfarm/**/worker-configuration.d.ts
+EOF
+
+      - name: Write clean-baseline contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p powerfarm/scripts
+          cat > powerfarm/source.json <<EOF
+          {
+            "canonicalBase": {
+              "repository": "${UPSTREAM_REPOSITORY}",
+              "commit": "${UPSTREAM_COMMIT}",
+              "layout": "full-repository-root",
+              "expectedCoreDeployableWorkers": 18
+            },
+            "legacyProvenance": {
+              "repository": "powerfarm/OLD-platform-NAO-USAR-os",
+              "role": "backup-and-provenance-only"
+            },
+            "starterIsBase": false,
+            "reuseExistingCloudflareWorkers": false
+          }
+          EOF
+
+          cat > powerfarm/deployment.jsonc <<'EOF'
+          {
+            "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
+            "publicDomain": "powerfarm.app",
+            "cleanInstall": {
+              "requireOldPlatformRemovedBeforeCreate": true,
+              "reuseExistingWorkers": false,
+              "allowHybridOldAndNewTopology": false
+            },
+            "core": {
+              "source": "../packages/*/wrangler.jsonc",
+              "expectedDeployableWorkers": 18
+            },
+            "extensions": {
+              "customGatekeeper": "powerfarm-gk-custom",
+              "identity": "powerfarm-gk-identity",
+              "engine": "powerfarm-engine",
+              "errorReporter": "powerfarm-error-reporter"
+            }
+          }
+          EOF
+
+          cat > powerfarm/CLEAN-REINSTALL-CONTRACT.md <<'EOF'
+          # Powerfarm clean reinstall contract
+
+          This file is an operational invariant, not a suggestion.
+
+          ## Canonical source
+
+          The repository root is the complete `cloudflare/cloudflare-os` source tree. The canonical base is **not** `cloudflare-os-starter`, a starter wrapper, or a submodule containing Cloudflare OS.
+
+          At this baseline the upstream core contains exactly 18 deployable Worker packages: 16 Gatekeepers, Router, and Workshop Backend. Powerfarm-specific components live under `powerfarm/` as an extension layer over that complete base.
+
+          The OLD Powerfarm repositories are backup/provenance. They are allowed as references for copying known-good Powerfarm code and history. They are never runtime, build, deployment, or topology dependencies.
+
+          ## Cloudflare reset rule
+
+          Before the new Powerfarm installation is created, the old Powerfarm Worker installation must be removed from Cloudflare.
+
+          **Deletion precedes creation.** A maintenance window is acceptable. A hybrid topology is not.
+
+          Do not keep an old Router, Backend, Gatekeeper, Engine, or other Worker running merely because its bytes look compatible with the new source. Do not adopt a live Worker as the canonical baseline. Do not perform an identity-only cutover and call the platform migrated.
+
+          The sequence is:
+
+          1. Inventory the existing Powerfarm Worker topology and record names, versions, routes, bindings, and required secrets without printing secret values.
+          2. Confirm the OLD GitHub repositories remain available as code/provenance backup.
+          3. Remove the old Powerfarm Worker installation from Cloudflare.
+          4. Prove the old Worker topology is gone before creating the replacement platform.
+          5. Install the complete 18-Worker Cloudflare OS base from this repository root.
+          6. Install the reviewed Powerfarm extension Workers from `powerfarm/`.
+          7. Bind only the explicitly authorized edges, including Identity to the private Engine runtime.
+          8. Attach `powerfarm.app` only after the new Router/topology is coherent.
+          9. Re-run live Operate, Change, Sleep, idempotency, and resume proofs.
+          10. Only then write a new deployment anchor and call the baseline active.
+
+          If the upstream core later contains 19, 22, or 30 Workers, update the source pin and the baseline guard intentionally. Never infer the new topology from whatever happens to be live in the Cloudflare account.
+
+          ## What is preserved
+
+          Source code and architecture knowledge that were already proven may be copied into the new repository. Durable external data may be preserved only when it is separately inventoried and explicitly declared as part of the new design.
+
+          Existing Worker deployments themselves are **not** preserved.
+
+          ## Powerfarm runtime invariants
+
+          Identity proves who. Registry states what world exists. Gatekeeper decides whether the actor may do the exact thing. Engine executes what was authorized. ADK owns workflow execution semantics.
+
+          `LLM designs it. LLM operates it. Registry remembers it. Gatekeeper authorizes it. ADK runs it. LLM is none of those three.`
+
+          Engine connects those facts without becoming another platform.
+
+          Only Identity may broker the private Engine `WorkspaceRuntime`. Engine must not become a public generic invocation surface, must not receive a Supabase service-role credential, and callers must not choose arbitrary Gadget source/revision/workspace/grant material.
+
+          ## Definition of done
+
+          A clean reinstall is complete only when all active Powerfarm Worker deployments were emitted from this repository after the old Worker installation was removed, `powerfarm.app` reaches the new Router, the private binding topology is proven, and Operate/Change/Sleep pass against the replacement installation.
+          EOF
+
+          cat > powerfarm/README.md <<'EOF'
+          # Powerfarm layer
+
+          The repository root is the complete Cloudflare OS codebase. This directory contains only Powerfarm-specific extensions, architecture records, and clean-install controls.
+
+          Start with `CLEAN-REINSTALL-CONTRACT.md`. It deliberately forbids the previous hybrid migration pattern.
+
+          Core source of truth: `../packages/*` and the pinned upstream commit in `source.json`.
+
+          Powerfarm runtime additions:
+
+          - `gatekeeper-identity`: identity plus Registry authority bridge; the only component allowed to bind to Engine.
+          - `engine`: private ADK execution runtime.
+          - `custom-gatekeeper`: organization-specific capability surface.
+          - `error-reporter`: private structured error sink.
+
+          Historical Powerfarm architecture/proof documents are under `docs/`. OLD repositories remain provenance only.
+          EOF
+
+          cat > powerfarm/scripts/assert-clean-baseline.mjs <<'EOF'
+          import { existsSync, readFileSync, readdirSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const expected = [
+            'gatekeeper-cloudflare', 'gatekeeper-confluence', 'gatekeeper-context', 'gatekeeper-email',
+            'gatekeeper-github', 'gatekeeper-google', 'gatekeeper-homeassistant', 'gatekeeper-linear',
+            'gatekeeper-mcp', 'gatekeeper-mcp-portal', 'gatekeeper-notion', 'gatekeeper-scheduler',
+            'gatekeeper-slack', 'gatekeeper-spotify', 'gatekeeper-supabase', 'gatekeeper-zoominfo',
+            'router', 'workshop-backend',
+          ];
+
+          const actual = readdirSync('packages', { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && existsSync(join('packages', entry.name, 'wrangler.jsonc')))
+            .map((entry) => entry.name)
+            .sort();
+          const want = [...expected].sort();
+          if (JSON.stringify(actual) !== JSON.stringify(want)) {
+            throw new Error(`full Cloudflare OS core drift: expected ${want.length} deployable Workers, found ${actual.length}\nexpected=${want.join(',')}\nactual=${actual.join(',')}`);
+          }
+
+          for (const forbidden of ['.gitmodules', 'cloudflare-os', 'state/ultimo-deploy.json']) {
+            if (existsSync(forbidden)) throw new Error(`forbidden legacy/starter baseline artifact: ${forbidden}`);
+          }
+
+          const source = JSON.parse(readFileSync('powerfarm/source.json', 'utf8'));
+          if (source.starterIsBase !== false) throw new Error('starter must never be the Powerfarm base');
+          if (source.reuseExistingCloudflareWorkers !== false) throw new Error('live Worker reuse must remain forbidden');
+          if (source.canonicalBase.expectedCoreDeployableWorkers !== actual.length) throw new Error('source.json core count mismatch');
+
+          const identity = readFileSync('powerfarm/gatekeeper-identity/wrangler.jsonc', 'utf8');
+          if (!identity.includes('"binding": "ENGINE"') || !identity.includes('"entrypoint": "WorkspaceRuntime"')) {
+            throw new Error('Identity must broker ENGINE -> WorkspaceRuntime');
+          }
+
+          for (const dir of ['packages', 'powerfarm']) {
+            for (const entry of readdirSync(dir, { withFileTypes: true })) {
+              if (!entry.isDirectory()) continue;
+              const path = join(dir, entry.name, 'wrangler.jsonc');
+              if (!existsSync(path) || path === 'powerfarm/gatekeeper-identity/wrangler.jsonc') continue;
+              const text = readFileSync(path, 'utf8');
+              if (text.includes('"binding": "ENGINE"')) throw new Error(`ENGINE binding forbidden outside Identity: ${path}`);
+            }
+          }
+
+          const engine = readFileSync('powerfarm/engine/wrangler.jsonc', 'utf8');
+          if (!/"workers_dev"\s*:\s*false/.test(engine)) throw new Error('Engine must keep workers_dev=false');
+          if (/service[_-]?role/i.test(engine)) throw new Error('Engine must not contain a service-role credential/config');
+
+          console.log(`clean baseline OK: full Cloudflare OS core = ${actual.length} Workers; starter/submodule/live-worker reuse = forbidden`);
+          EOF
+
+      - name: Mark root clearly as the full base
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          cat > "$tmp" <<'EOF'
+          > [!IMPORTANT]
+          > **Powerfarm canonical-base note:** this repository contains the **complete `cloudflare/cloudflare-os` source tree** at the pinned commit recorded in `powerfarm/source.json`. Powerfarm does **not** use `cloudflare-os-starter` as its base. Any upstream documentation below that mentions the starter describes an upstream deployment option only; it is not the Powerfarm architecture or deployment source. See `powerfarm/CLEAN-REINSTALL-CONTRACT.md`.
+          >
+
+          EOF
+          cat README.md >> "$tmp"
+          mv "$tmp" README.md
+
+      - name: Add baseline CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > .github/workflows/powerfarm-baseline.yml <<'EOF'
+          name: Powerfarm full-base CI
+
+          on:
+            pull_request:
+            push:
+              branches: [main]
+
+          permissions:
+            contents: read
+
+          jobs:
+            baseline:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: pnpm/action-setup@v4
+                  with:
+                    run_install: false
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: 24
+                    cache: pnpm
+                - run: node powerfarm/scripts/assert-clean-baseline.mjs
+                - run: pnpm install --frozen-lockfile
+                - run: pnpm test
+                - run: pnpm lint
+                - name: Wrangler dry-run every core and Powerfarm Worker
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    for config in packages/*/wrangler.jsonc powerfarm/*/wrangler.jsonc; do
+                      dir="$(dirname "$config")"
+                      name="$(basename "$dir")"
+                      out="/tmp/wrangler-dry/$name"
+                      mkdir -p "$out"
+                      (cd "$dir" && pnpm exec wrangler deploy --dry-run --outdir "$out")
+                    done
+          EOF
+
+      - name: Refresh lockfile for the combined workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@11.17.0 --activate
+          pnpm install --lockfile-only --no-frozen-lockfile
+          node powerfarm/scripts/assert-clean-baseline.mjs
+
+      - name: Commit rebuilt baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "powerfarm-baseline-bot"
+          git config user.email "powerfarm-baseline-bot@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "refactor: base Powerfarm on full 18-worker Cloudflare OS"
+          git push origin HEAD:baseline/full-cloudflare-os-clean
