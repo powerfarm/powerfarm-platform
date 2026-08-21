@@ -6,8 +6,8 @@ TARGET_BRANCH="baseline/full-cloudflare-os-clean"
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-rm -rf /tmp/pf-keep /tmp/cf-os
-mkdir -p /tmp/pf-keep/packages /tmp/pf-keep/docs
+rm -rf /tmp/pf-keep /tmp/cf-os /tmp/target-keep
+mkdir -p /tmp/pf-keep/packages /tmp/pf-keep/docs /tmp/target-keep
 
 for p in custom-gatekeeper error-reporter gatekeeper-identity powerfarm-engine; do
   test -d "packages/$p"
@@ -25,6 +25,11 @@ for p in docs/architecture docs/adr/0001-stateless-compute-durable-truth.md docs
   fi
 done
 
+# Keep the target branch's workflow directory byte-for-byte. The Actions token can write
+# repository contents but is intentionally not allowed to rewrite workflow files. Upstream
+# GitHub CI metadata is not part of the Powerfarm runtime base.
+git archive "origin/$TARGET_BRANCH" .github/workflows | tar -x -C /tmp/target-keep
+
 git clone --quiet https://github.com/cloudflare/cloudflare-os.git /tmp/cf-os
 git -C /tmp/cf-os checkout --quiet "$UPSTREAM_COMMIT"
 test "$(git -C /tmp/cf-os rev-parse HEAD)" = "$UPSTREAM_COMMIT"
@@ -33,6 +38,13 @@ test "$(git -C /tmp/cf-os rev-parse HEAD)" = "$UPSTREAM_COMMIT"
 # retained. Cloudflare OS becomes the repository root, not a submodule and not a nested copy.
 find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 rsync -a --exclude=.git /tmp/cf-os/ ./
+
+# Upstream workflow files are repository-maintenance metadata, not the Cloudflare OS runtime.
+# Restore the target branch's workflows so this structural import does not mutate Actions files.
+rm -rf .github/workflows
+mkdir -p .github
+cp -a /tmp/target-keep/.github/workflows .github/workflows
+
 test -f packages/router/wrangler.jsonc
 test -f packages/workshop-backend/wrangler.jsonc
 test ! -e .gitmodules
@@ -113,9 +125,14 @@ test ! -e state/ultimo-deploy.json
 printf 'full Cloudflare OS core workers: %s\n' "$core_count"
 printf 'Powerfarm extension workers: %s\n' "$ext_count"
 
+# Build a commit whose parent is the generated candidate branch itself. This keeps PR-trigger
+# commits, including workflow edits, out of the candidate branch's history and makes the push a
+# normal fast-forward with zero workflow-file delta.
 git config user.name "powerfarm-baseline-bot"
 git config user.email "powerfarm-baseline-bot@users.noreply.github.com"
 git add -A
-git status --short
-git commit -m "refactor: base Powerfarm on full 18-worker Cloudflare OS"
-git push origin "HEAD:$TARGET_BRANCH"
+parent="$(git rev-parse "origin/$TARGET_BRANCH")"
+tree="$(git write-tree)"
+commit="$(printf '%s\n' 'refactor: base Powerfarm on full 18-worker Cloudflare OS' | git commit-tree "$tree" -p "$parent")"
+printf 'generated candidate commit: %s parent: %s\n' "$commit" "$parent"
+git push origin "$commit:refs/heads/$TARGET_BRANCH"
