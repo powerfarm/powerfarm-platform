@@ -4,6 +4,6 @@
   "cloudflareOsRepository": "cloudflare/cloudflare-os",
   "cloudflareOsCommit": "bf7f762d7fa73553284d731ab6a978d3ea17be24",
   "canonicalRuntimeBaselineCommit": "570715a75ddf40288834e0249f37e77754034511",
-  "productionBaselineActivated": false,
+  "productionBaselineActivated": true,
   "productionDeployControllerEnabled": false
 }

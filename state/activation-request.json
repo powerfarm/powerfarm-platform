@@ -1,4 +1,6 @@
 {
-  "requested": true,
-  "reason": "Credential preflight passed from the rich canonical baseline and proved both production tokens can read the Powerfarm account while all eight live Worker versions still match the sealed historical baseline. Arm the one-time canonical activation contract."
+  "requested": false,
+  "reason": "Credential preflight passed from the rich canonical baseline and proved both production tokens can read the Powerfarm account while all eight live Worker versions still match the sealed historical baseline. Arm the one-time canonical activation contract.",
+  "completedAt": "2026-08-21T14:11:10.078Z",
+  "activatedRuntimeCommit": "570715a75ddf40288834e0249f37e77754034511"
 }
