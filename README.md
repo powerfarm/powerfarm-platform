@@ -1,3 +1,7 @@
+> [!IMPORTANT]
+> **POWERFARM CANONICAL BASE INVARIANT:** this repository root is the complete pinned `cloudflare/cloudflare-os` source tree. `cloudflare-os-starter` is **not** the Powerfarm base, deployment source, or topology authority. Powerfarm-specific code lives under `powerfarm/`. The OLD repositories are backup/provenance only. Production follows `powerfarm/CLEAN-REINSTALL-CONTRACT.md`: inventory the old Worker installation, remove it, prove it is gone, and only then create the replacement Workers. Do not build a hybrid old/new topology.
+>
+
 # Cloudflare OS: An AI productivity environment
 
 Cloudflare OS is an "operating system" for AI productivity originally developed for use inside Cloudflare. A large portion of Cloudflare's workforce -- from engineering to sales and everything in between -- uses Cloudflare OS every day to help them do their jobs.

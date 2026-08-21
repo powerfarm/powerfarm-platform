@@ -1,3 +1,18 @@
+# POWERFARM CANONICAL BASE INVARIANT
+
+Before changing deployment, topology, packages, or architecture, treat these as hard constraints:
+
+- The repository root is the complete pinned `cloudflare/cloudflare-os` source tree recorded in `powerfarm/source.json`.
+- `cloudflare-os-starter` is not the Powerfarm base and must never be substituted for the complete source tree.
+- Cloudflare OS must not be hidden behind a starter wrapper or git submodule.
+- Powerfarm-specific extensions live under `powerfarm/`.
+- OLD repositories are backup/provenance only, never runtime/build/deploy dependencies.
+- Live Cloudflare residue is not a topology source of truth.
+- For the production reset, deletion precedes creation: inventory the old Powerfarm Worker installation, remove it, prove absence, then create the replacement platform from this repository. Never adopt a live old Worker into the new baseline.
+- Read `powerfarm/CLEAN-REINSTALL-CONTRACT.md` and `powerfarm/docs/architecture/rejected-paths.md` before production work.
+
+The upstream Cloudflare OS agent guidance follows unchanged below.
+
 This project is building a platform for "vibe coded" personal applications and AI agents that run inside a strong sandbox.
 
 The following files are commonly important to reference:
