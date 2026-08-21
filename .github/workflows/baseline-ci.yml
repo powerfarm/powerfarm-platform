@@ -17,18 +17,36 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
       - run: corepack enable
+
+      - name: REGRA 0 - official Cloudflare OS upstream
+        run: node scripts/guards/check-upstream-source.mjs
+      - name: REGRA 0a - sealed official starter deploy library
+        run: node scripts/guards/check-starter-source.mjs
+
       - run: pnpm install --frozen-lockfile
+      - name: REGRA 0b - Powerfarm platform contract
+        run: node scripts/guards/check-platform-contract.mjs
       - run: pnpm --dir cloudflare-os install --frozen-lockfile
-      - name: Upstream and platform guards
-        run: pnpm guards
+
+      - name: REGRA 2 - destructive migrations require approval
+        run: node scripts/guards/check-migrations.mjs
+      - name: Generate configs and full Wrangler dry-run
+        run: pnpm check
+      - name: Expected state matches generated configs
+        run: node scripts/derive-expected.mjs --check
+      - name: REGRA 3 - bindings contract
+        run: node scripts/guards/check-bindings.mjs
+      - name: REGRA 4 - admin contract
+        run: node scripts/guards/check-admins.mjs
+
       - name: Deterministic tests
         run: pnpm test
-      - name: Full Wrangler dry-run
-        run: pnpm check
+
       - name: Migration safety boundary
         shell: bash
         run: |
