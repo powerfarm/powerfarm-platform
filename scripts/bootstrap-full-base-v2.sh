@@ -118,4 +118,6 @@ git config user.email "powerfarm-baseline-bot@users.noreply.github.com"
 git add -A
 git status --short
 git commit -m "refactor: base Powerfarm on full 18-worker Cloudflare OS"
-git push origin "HEAD:$TARGET_BRANCH"
+# This branch exists only as a generated candidate tree. Replace it atomically, but refuse to
+# clobber an unseen concurrent update.
+git push --force-with-lease origin "HEAD:$TARGET_BRANCH"
