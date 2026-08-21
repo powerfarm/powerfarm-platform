@@ -11,14 +11,14 @@
   },
   "dependencies": {
     "@gadgets/workshop-shared": "workspace:*",
-    "capnweb": "^0.8.0",
-    "capnweb-validate": "0.2.1"
+    "capnweb": "catalog:",
+    "capnweb-validate": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260730.1",
     "@types/node": "^26.1.0",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.115.0"
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
   }
 }
