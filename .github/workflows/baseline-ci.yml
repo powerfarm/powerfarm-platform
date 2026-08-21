@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - baseline/cloudflare-os-bf7f762
 
 permissions:
   contents: read
