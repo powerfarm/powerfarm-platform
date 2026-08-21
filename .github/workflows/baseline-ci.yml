@@ -51,8 +51,31 @@ jobs:
         run: |
           set -euo pipefail
           test -f state/migration-source.json
-          test ! -f state/ultimo-deploy.json
-          test "$(node -e 'const x=require("./state/migration-source.json"); process.stdout.write(String(x.productionDeployControllerEnabled))')" = "false"
+          test -f state/legacy-production-baseline.json
+          test ! -f .github/workflows/deploy.yml
+          node --input-type=module <<'NODE'
+          import { existsSync, readFileSync } from "node:fs";
+          const migration = JSON.parse(readFileSync("state/migration-source.json", "utf8"));
+          if (typeof migration.productionBaselineActivated !== "boolean") {
+            throw new Error("productionBaselineActivated must be boolean");
+          }
+          if (migration.productionDeployControllerEnabled !== false) {
+            throw new Error("steady-state deploy controller must remain disabled during migration");
+          }
+          const hasAnchor = existsSync("state/ultimo-deploy.json");
+          if (hasAnchor !== migration.productionBaselineActivated) {
+            throw new Error("ultimo-deploy presence must match productionBaselineActivated");
+          }
+          if (hasAnchor) {
+            const anchor = JSON.parse(readFileSync("state/ultimo-deploy.json", "utf8"));
+            if (!/^[0-9a-f]{40}$/i.test(anchor.commit ?? "")) {
+              throw new Error("new production anchor must reference a Git commit");
+            }
+            if (anchor.commit === "60f3f34097a38a29eac6fd91ef6e5fa0958d23d4") {
+              throw new Error("legacy Git SHA cannot become the active anchor in the new repository");
+            }
+          }
+          NODE
           test "$(git ls-files -s cloudflare-os | awk '{print $1":"$2}')" = "160000:bf7f762d7fa73553284d731ab6a978d3ea17be24"
           test -z "$(git ls-files 'packages/*/dist/**' 'packages/*/worker-configuration.d.ts')"
       - name: Patch hygiene
