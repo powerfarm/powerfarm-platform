@@ -1,0 +1,42 @@
+name: Baseline CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - baseline/cloudflare-os-bf7f762
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: Upstream and platform guards
+        run: pnpm guards
+      - name: Deterministic tests
+        run: pnpm test
+      - name: Full Wrangler dry-run
+        run: pnpm check
+      - name: Migration safety boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f state/migration-source.json
+          test ! -f state/ultimo-deploy.json
+          test "$(node -e 'const x=require("./state/migration-source.json"); process.stdout.write(String(x.productionDeployControllerEnabled))')" = "false"
+          test "$(git ls-files -s cloudflare-os | awk '{print $1":"$2}')" = "160000:bf7f762d7fa73553284d731ab6a978d3ea17be24"
+          test -z "$(git ls-files 'packages/*/dist/**' 'packages/*/worker-configuration.d.ts')"
+      - name: Patch hygiene
+        run: git diff --check
