@@ -1,0 +1,32 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "powerfarm-gk-identity",
+  "main": ".wrangler/validate/src/index.ts",
+  "build": {
+    "command": "pnpm exec capnweb-validate build --out .wrangler/validate",
+    "watch_dir": "src"
+  },
+  "compatibility_date": "2026-08-04",
+  "compatibility_flags": ["allow_irrevocable_stub_storage", "nodejs_compat"],
+  "migrations": [
+    { "tag": "v0", "new_sqlite_classes": ["UserAccount"] },
+    { "tag": "v1", "new_sqlite_classes": ["PowerfarmGatekeeper"] }
+  ],
+  // ISSUER e CLIENT_ID sao publicos. CLIENT_SECRET entra por
+  //   wrangler secret put CLIENT_SECRET --name powerfarm-gk-identity
+  // e nunca fica em ficheiro versionado.
+  "vars": {
+    "ISSUER": "https://wmsrqefgdgcijupeogfa.supabase.co/auth/v1",
+    // client_id nao e segredo: viaja na URL de autorizacao, a vista do utilizador.
+    "CLIENT_ID": "79be4b93-d42e-4fd1-b79b-162f62f0b02f",
+    "SUPABASE_URL": "https://wmsrqefgdgcijupeogfa.supabase.co"
+  },
+  "services": [
+    { "binding": "ENGINE", "service": "powerfarm-engine", "entrypoint": "WorkspaceRuntime" }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  }
+}

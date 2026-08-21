@@ -1,0 +1,10 @@
+node_modules/
+wrangler.prod.jsonc
+versoes-antes.json
+drift.txt
+.wrangler/
+.DS_Store
+
+# Canonical baseline: generated Worker outputs stay out of Git.
+packages/*/dist/
+packages/*/worker-configuration.d.ts

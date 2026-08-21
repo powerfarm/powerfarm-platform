@@ -1,0 +1,6 @@
+{
+  "//": "REGRA 2. Cada aprovação vale para UM conteúdo exato de migration.",
+  "//2": "Se a migration mudar mantendo a tag, o digest muda e a aprovação cai.",
+  "//3": "O erro do check-migrations.mjs imprime o bloco pronto para colar aqui.",
+  "approved": []
+}
