@@ -43,10 +43,15 @@ minimumReleaseAgeExclude:
   - workerd
   - "@cloudflare/workerd-*"
 
+# pnpm 11 fails closed on unreviewed dependency build scripts. Every entry here is an explicit
+# approval, never a blanket bypass. sqlite3 is required by the combined full-base + Powerfarm
+# dependency graph and must run its native install step; any newly introduced build script still
+# fails CI until it is reviewed and added deliberately.
 allowBuilds:
   '@google/genai': true
   core-js-pure: true
   esbuild: true
   protobufjs: true
   sharp: true
+  sqlite3: true
   workerd: true
