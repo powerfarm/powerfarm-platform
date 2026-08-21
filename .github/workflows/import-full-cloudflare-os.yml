@@ -22,5 +22,5 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           submodules: false
-      - name: Replace starter-shaped branch with complete Cloudflare OS
+      - name: Build full Cloudflare OS candidate without changing target workflows
         run: bash scripts/bootstrap-full-base-v2.sh
