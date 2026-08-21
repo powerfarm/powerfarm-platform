@@ -15,7 +15,11 @@ test("credential preflight can authenticate but cannot write Cloudflare", async 
     await readFile(resolve(root, "state/credential-preflight-request.json"), "utf8"),
   );
 
-  assert.equal(request.requested, false, "preflight infrastructure must merge disarmed");
+  assert.equal(typeof request.requested, "boolean", "preflight request must be explicit");
+  assert.match(workflow, /request\.requested === true/,
+    "workflow gate must require an explicit true request before credential access");
+  assert.match(workflow, /request\.requested = false/,
+    "successful preflight must disarm its own request");
   assert.match(workflow, /paths:\s*\n\s*- state\/credential-preflight-request\.json/);
   assert.match(workflow, /environment: producao/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN_READONLY/);
