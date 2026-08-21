@@ -8,9 +8,16 @@ on:
 permissions:
   contents: read
 
+env:
+  NODE_VERSION: "24.19.0"
+
 jobs:
   baseline:
     runs-on: ubuntu-latest
+    # Upstream explicitly caps its build+test job because a leaked child process can keep
+    # node --test alive indefinitely. Powerfarm adds extension packages and dry-runs, so keep
+    # a bounded but slightly wider window instead of GitHub's six-hour default.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +30,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Prove canonical source shape before installing dependencies
@@ -32,11 +39,19 @@ jobs:
       - name: Frozen workspace install
         run: pnpm install --frozen-lockfile
 
+      # Match the complete Cloudflare OS CI contract: build/codegen/type-check before tests.
+      # Some tests consume generated artifacts and upstream intentionally runs this first.
+      - name: Build and type-check full Cloudflare OS and Powerfarm
+        run: pnpm build
+
       - name: Full Cloudflare OS and Powerfarm tests
         run: pnpm test
 
-      - name: Full Cloudflare OS and Powerfarm lint/types
-        run: pnpm lint
+      - name: Repository lint
+        run: pnpm lint:check
+
+      - name: Type-check repository scripts
+        run: pnpm types:scripts
 
       - name: Wrangler dry-run every core and Powerfarm Worker
         shell: bash
