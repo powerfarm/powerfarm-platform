@@ -105,6 +105,24 @@ jobs:
           echo "canonical=$CANONICAL" >> "$GITHUB_OUTPUT"
           echo "worker=$WORKER" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve Cloudflare account id from canonical deployment source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID=$(node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+          import { parse } from "jsonc-parser";
+          const cfg = parse(await readFile("deployment.jsonc", "utf8"), [], { allowTrailingComma: true });
+          const id = cfg?.accountId;
+          if (!/^[0-9a-f]{32}$/i.test(id ?? "")) throw new Error("deployment.accountId is missing or malformed");
+          if (cfg?.aiGateway?.accountId && cfg.aiGateway.accountId !== id) {
+            throw new Error("deployment accountId and aiGateway.accountId disagree");
+          }
+          process.stdout.write(id);
+          NODE
+          )
+          echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+
       - id: edge
         name: Resolve public edge from deployment source
         shell: bash
@@ -134,13 +152,11 @@ jobs:
       # Read-only proof. No write token has been exposed yet.
       - name: Prove live versions still equal the last observed legacy production baseline
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/verify-legacy-production.mjs --out versoes-antes.json
 
       - name: REGRA 1 - all non-Identity Workers match the canonical topology
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/check-drift.mjs --esperado state/esperado.json --ignore-workers "${{ steps.plan.outputs.worker }}"
 
@@ -148,14 +164,12 @@ jobs:
       - id: deploy
         name: Deploy only the outstanding Identity receiver fix
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: pnpm --dir packages/gatekeeper-identity exec wrangler deploy --config wrangler.prod.jsonc
 
       - id: versions
         name: Prove only Identity changed version
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
         run: node scripts/verify-versions.mjs --antes versoes-antes.json --changed-workers "${{ steps.plan.outputs.worker }}"
 
@@ -169,7 +183,6 @@ jobs:
         name: Record the new-history production anchor, but keep continuous deploy disabled
         if: success()
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN_READONLY }}
           GH_PUSH_TOKEN: ${{ github.token }}
           CANONICAL_RUNTIME_COMMIT: ${{ steps.plan.outputs.canonical }}
@@ -189,7 +202,6 @@ jobs:
         name: Recover Identity if any post-write proof or durable anchoring failed
         if: failure() && steps.deploy.conclusion != 'skipped'
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PUBLIC_URL: ${{ steps.edge.outputs.url }}
         run: node scripts/rollback.mjs --from versoes-antes.json --only-workers "${{ steps.plan.outputs.worker }}" --verify
