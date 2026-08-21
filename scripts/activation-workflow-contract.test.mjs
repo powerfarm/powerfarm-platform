@@ -19,11 +19,19 @@ test("activation workflow is one-shot, Identity-only, and preserves credential b
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.match(workflow, /activate:[\s\S]*permissions:\s*\n\s*contents: write\s*\n\s*issues: write/);
 
+  assert.match(workflow, /deployment\.jsonc/,
+    "Cloudflare account id must be resolved from canonical deployment source");
+  assert.match(workflow, /cfg\?\.accountId/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID=\$ACCOUNT_ID/);
+  assert.doesNotMatch(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/,
+    "activation must not duplicate account id as a secret");
+
   assert.match(workflow, /verify-legacy-production\.mjs --out versoes-antes\.json/);
   assert.match(workflow, /check-drift\.mjs --esperado state\/esperado\.json --ignore-workers/);
   assert.match(workflow, /packages\/gatekeeper-identity exec wrangler deploy --config wrangler\.prod\.jsonc/);
   assert.doesNotMatch(workflow, /\bpnpm deploy\b/);
 
+  const accountIndex = workflow.indexOf("CLOUDFLARE_ACCOUNT_ID=$ACCOUNT_ID");
   const verifyIndex = workflow.indexOf("verify-legacy-production.mjs");
   const deployIndex = workflow.indexOf("packages/gatekeeper-identity exec wrangler deploy");
   const anchorIndex = workflow.indexOf("GITHUB_SHA=\"$CANONICAL_RUNTIME_COMMIT\" node scripts/record-versions.mjs");
@@ -31,6 +39,8 @@ test("activation workflow is one-shot, Identity-only, and preserves credential b
   const stateCheckIndex = workflow.indexOf("node scripts/check-production-migration-state.mjs");
   const pushIndex = workflow.indexOf("git push \"https://x-access-token:${GH_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git\" HEAD:main");
   const rollbackIndex = workflow.indexOf("node scripts/rollback.mjs --from versoes-antes.json");
+  assert.ok(accountIndex >= 0 && verifyIndex > accountIndex,
+    "canonical account id must be resolved before the first Cloudflare API proof");
   assert.ok(verifyIndex >= 0 && deployIndex > verifyIndex,
     "exact live baseline proof must happen before the first production write");
   assert.ok(anchorIndex > deployIndex,
