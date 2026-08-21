@@ -175,33 +175,7 @@ jobs:
         run: |
           set -euo pipefail
           GITHUB_SHA="$CANONICAL_RUNTIME_COMMIT" node scripts/record-versions.mjs --out state/ultimo-deploy.json
-
-          node --input-type=module <<'NODE'
-          import { readFileSync, writeFileSync } from "node:fs";
-          const migrationPath = "state/migration-source.json";
-          const requestPath = "state/activation-request.json";
-          const anchorPath = "state/ultimo-deploy.json";
-          const migration = JSON.parse(readFileSync(migrationPath, "utf8"));
-          const request = JSON.parse(readFileSync(requestPath, "utf8"));
-          const anchor = JSON.parse(readFileSync(anchorPath, "utf8"));
-          if (anchor.commit !== process.env.CANONICAL_RUNTIME_COMMIT) {
-            throw new Error("active production anchor does not point at canonical runtime baseline");
-          }
-          migration.productionBaselineActivated = true;
-          migration.productionDeployControllerEnabled = false;
-          request.requested = false;
-          request.completedAt = new Date().toISOString();
-          request.activatedRuntimeCommit = anchor.commit;
-          anchor.activation = {
-            mode: "legacy-baseline-to-canonical-identity-only",
-            historicalSourceCommit: "60f3f34097a38a29eac6fd91ef6e5fa0958d23d4",
-            changedWorker: "powerfarm-gk-identity"
-          };
-          writeFileSync(migrationPath, JSON.stringify(migration, null, 2) + "\n");
-          writeFileSync(requestPath, JSON.stringify(request, null, 2) + "\n");
-          writeFileSync(anchorPath, JSON.stringify(anchor, null, 2) + "\n");
-          NODE
-
+          node scripts/finalize-production-activation.mjs
           git config user.name powerfarm-ci
           git config user.email ci@powerfarm.app
           git add state/migration-source.json state/activation-request.json state/ultimo-deploy.json
