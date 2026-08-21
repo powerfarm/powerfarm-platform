@@ -2,6 +2,7 @@
 import { spawnSync } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parse } from "jsonc-parser";
 
 export function createTypesConfig(config, sourceMain) {
@@ -42,7 +43,7 @@ export async function generateWorkerTypes({ cwd = process.cwd(), sourceMain }) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   try {
     await generateWorkerTypes({ sourceMain: process.argv[2] });
   } catch (error) {
