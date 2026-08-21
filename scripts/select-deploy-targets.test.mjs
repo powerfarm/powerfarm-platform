@@ -50,6 +50,20 @@ test("docs and workflow-only edits do not redeploy Workers", () => {
   );
 });
 
+test("credential preflight governance adds no Worker deployment debt", () => {
+  assert.deepEqual(
+    selectDeploymentTargets([
+      ".github/workflows/cloudflare-credential-preflight.yml",
+      "scripts/check-cloudflare-api-read.mjs",
+      "scripts/check-cloudflare-api-read.test.mjs",
+      "scripts/cloudflare-credential-preflight-workflow.test.mjs",
+      "state/credential-preflight-request.json",
+      "state/cloudflare-credential-preflight.json",
+    ]),
+    [],
+  );
+});
+
 test("migration state keeps activation and steady-state deployment separate", async () => {
   const migration = JSON.parse(
     await readFile(resolve(root, "state/migration-source.json"), "utf8"),
