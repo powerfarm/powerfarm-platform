@@ -16,6 +16,8 @@ test("activation workflow is one-shot, Identity-only, and preserves credential b
   assert.match(workflow, /request\.requested === true/);
   assert.match(workflow, /productionBaselineActivated === true/);
   assert.match(workflow, /productionDeployControllerEnabled !== false/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.match(workflow, /activate:[\s\S]*permissions:\s*\n\s*contents: write\s*\n\s*issues: write/);
 
   assert.match(workflow, /verify-legacy-production\.mjs --out versoes-antes\.json/);
   assert.match(workflow, /check-drift\.mjs --esperado state\/esperado\.json --ignore-workers/);
@@ -24,8 +26,14 @@ test("activation workflow is one-shot, Identity-only, and preserves credential b
 
   const verifyIndex = workflow.indexOf("verify-legacy-production.mjs");
   const deployIndex = workflow.indexOf("packages/gatekeeper-identity exec wrangler deploy");
+  const anchorIndex = workflow.indexOf("GITHUB_SHA=\"$CANONICAL_RUNTIME_COMMIT\" node scripts/record-versions.mjs");
+  const rollbackIndex = workflow.indexOf("node scripts/rollback.mjs --from versoes-antes.json");
   assert.ok(verifyIndex >= 0 && deployIndex > verifyIndex,
     "exact live baseline proof must happen before the first production write");
+  assert.ok(anchorIndex > deployIndex,
+    "durable Git anchor must happen only after the Identity write and its proofs");
+  assert.ok(rollbackIndex > anchorIndex,
+    "anchor failure must still flow into automatic Identity rollback");
 
   const readOnlyOccurrences = workflow.match(/CLOUDFLARE_API_TOKEN_READONLY/g) ?? [];
   assert.ok(readOnlyOccurrences.length >= 3,
@@ -34,6 +42,7 @@ test("activation workflow is one-shot, Identity-only, and preserves credential b
 
   assert.match(workflow, /select-deploy-targets\.mjs --base "\$CANONICAL" --head "\$GITHUB_SHA"/);
   assert.match(workflow, /if \[ "\$EXTRA" != "none" \]/);
+  assert.match(workflow, /test "\$\(git rev-parse origin\/main\)" = "\$GITHUB_SHA"/);
   assert.match(workflow, /GITHUB_SHA="\$CANONICAL_RUNTIME_COMMIT" node scripts\/record-versions\.mjs/);
   assert.match(workflow, /migration\.productionBaselineActivated = true/);
   assert.match(workflow, /migration\.productionDeployControllerEnabled = false/);
