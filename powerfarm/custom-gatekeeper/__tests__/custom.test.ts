@@ -6,14 +6,14 @@ import {
 } from "../src/custom.js";
 
 describe("custom-gatekeeper", () => {
-  it("describes an auto-provisioned singleton", () => {
+  it("describes an auto-provisioned PowerFarm singleton", () => {
     expect(describeCustomVendor()).toMatchObject({
-      displayName: "Custom Gatekeeper",
+      displayName: "PowerFarm",
       autoProvisionsAccount: true,
       providesAuth: false,
     });
     expect(describeCustomAccount()).toMatchObject({
-      displayName: "Custom Gatekeeper",
+      displayName: "PowerFarm",
       singleton: { tsType: "CustomSession" },
     });
   });
