@@ -34,13 +34,13 @@ type ObservationQueue = Pick<ApprovalQueue, "authorizeObservation"> &
 
 export function describeCustomVendor(): VendorDescription {
   return {
-    displayName: "Custom Gatekeeper",
-    url: "https://github.com/cloudflare/cloudflare-os-starter",
+    displayName: "PowerFarm",
+    url: "https://github.com/powerfarm/powerfarm-platform",
     logo: CUSTOM_ICON,
     color: "#e8f2ff",
-    tagline: "Example organization-specific capability",
+    tagline: "PowerFarm organization-specific capabilities",
     description:
-      "A minimal Gatekeeper to copy when connecting CloudflareOS to your organization's systems.",
+      "PowerFarm-specific Gatekeeper for capabilities owned by this installation.",
     autoProvisionsAccount: true,
     providesAuth: false,
   };
@@ -48,7 +48,7 @@ export function describeCustomVendor(): VendorDescription {
 
 export function describeCustomAccount(): AccountDescription {
   return {
-    displayName: "Custom Gatekeeper",
+    displayName: "PowerFarm",
     avatar: CUSTOM_ICON,
     singleton: { tsType: "CustomSession" },
   };
