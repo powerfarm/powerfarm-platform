@@ -5,8 +5,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {
-    "build": "tsc",
-    "types:check": "tsc --noEmit",
+    "types": "wrangler types",
+    "build": "pnpm types && tsc",
+    "types:check": "pnpm types && tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
