@@ -6,7 +6,7 @@
   "main": "./src/index.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run src/*.test.ts",
+    "test": "vitest run",
     "types:check": "tsc --noEmit"
   },
   "dependencies": {
