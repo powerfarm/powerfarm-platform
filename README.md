@@ -51,8 +51,16 @@ Only Identity brokers Engine. Engine invocation is non-public, Engine has no Sup
 - [`docs/architecture/rejected-paths.md`](docs/architecture/rejected-paths.md): shortcuts and experiments that must not return.
 - [`docs/powerfarm-v0.1-platform-proof.md`](docs/powerfarm-v0.1-platform-proof.md): dated historical Operate/Change/Sleep live proof.
 
-## Production safety
+## Current production status
 
-Canonical source and production authority are separate facts. The new repository must complete its read-only Cloudflare credential/topology preflight and one-time migration activation before it becomes the production deployment anchor. Continuous production deployment remains a later, separately reviewed step.
+The one-time canonical production activation is complete.
+
+- credential/topology preflight passed and is durably recorded in `state/cloudflare-credential-preflight.json`;
+- all eight Workers matched the sealed historical baseline immediately before the activation write;
+- the activation changed **Identity only** and recorded the new production Worker snapshot in `state/ultimo-deploy.json`;
+- `state/migration-source.json` records `productionBaselineActivated: true`;
+- continuous production deployment intentionally remains disabled with `productionDeployControllerEnabled: false`.
+
+That means this repository is now the canonical production baseline, but it is **not** yet an automatic production deploy controller. Steady-state deployment is a separate follow-up contract.
 
 Cloudflare account ID comes from `deployment.jsonc`; workflows intentionally do not use a `CLOUDFLARE_ACCOUNT_ID` GitHub secret. Production token values must never be committed or printed.
