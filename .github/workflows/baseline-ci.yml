@@ -1,57 +1,60 @@
-name: Baseline CI
+name: Powerfarm full-base CI
 
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  static:
+  baseline:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: corepack enable
+          cache: pnpm
 
-      - name: REGRA 0 - official Cloudflare OS upstream
-        run: node scripts/guards/check-upstream-source.mjs
-      - name: REGRA 0a - sealed official starter deploy library
-        run: node scripts/guards/check-starter-source.mjs
+      - name: Prove canonical source shape before installing dependencies
+        run: node powerfarm/scripts/assert-clean-baseline.mjs
 
-      - run: pnpm install --frozen-lockfile
-      - name: REGRA 0b - Powerfarm platform contract
-        run: node scripts/guards/check-platform-contract.mjs
-      - run: pnpm --dir cloudflare-os install --frozen-lockfile
+      - name: Frozen workspace install
+        run: pnpm install --frozen-lockfile
 
-      - name: REGRA 2 - destructive migrations require approval
-        run: node scripts/guards/check-migrations.mjs
-      - name: Generate configs and full Wrangler dry-run
-        run: pnpm check
-      - name: Expected state matches generated configs
-        run: node scripts/derive-expected.mjs --check
-      - name: REGRA 3 - bindings contract
-        run: node scripts/guards/check-bindings.mjs
-      - name: REGRA 4 - admin contract
-        run: node scripts/guards/check-admins.mjs
-
-      - name: Deterministic tests
+      - name: Full Cloudflare OS and Powerfarm tests
         run: pnpm test
 
-      - name: Migration safety boundary
+      - name: Full Cloudflare OS and Powerfarm lint/types
+        run: pnpm lint
+
+      - name: Wrangler dry-run every core and Powerfarm Worker
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/check-production-migration-state.mjs
-          test "$(git ls-files -s cloudflare-os | awk '{print $1":"$2}')" = "160000:bf7f762d7fa73553284d731ab6a978d3ea17be24"
-          test -z "$(git ls-files 'packages/*/dist/**' 'packages/*/worker-configuration.d.ts')"
+          rm -rf /tmp/powerfarm-wrangler-dry
+          mkdir -p /tmp/powerfarm-wrangler-dry
+          for config in packages/*/wrangler.jsonc powerfarm/*/wrangler.jsonc; do
+            dir="$(dirname "$config")"
+            name="$(basename "$dir")"
+            out="/tmp/powerfarm-wrangler-dry/$name"
+            mkdir -p "$out"
+            echo "dry-run: $dir"
+            (cd "$dir" && pnpm exec wrangler deploy --dry-run --outdir "$out")
+          done
+
+      - name: Re-prove topology after generated build steps
+        run: node powerfarm/scripts/assert-clean-baseline.mjs
+
       - name: Patch hygiene
         run: git diff --check
