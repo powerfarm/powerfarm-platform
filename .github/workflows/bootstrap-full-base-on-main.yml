@@ -19,4 +19,4 @@ jobs:
           fetch-depth: 0
           submodules: false
       - name: Rebuild branch from full upstream source
-        run: bash scripts/bootstrap-full-base.sh
+        run: bash scripts/bootstrap-full-base-v2.sh
