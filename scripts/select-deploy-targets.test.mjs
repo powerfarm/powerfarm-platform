@@ -7,6 +7,16 @@ import { DEPLOYMENT_ORDER, selectDeploymentTargets } from "./select-deploy-targe
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+async function isMissing(path) {
+  try {
+    await readFile(path, "utf8");
+    return false;
+  } catch (error) {
+    if (error?.code === "ENOENT") return true;
+    throw error;
+  }
+}
+
 test("identity-only changes redeploy only Identity", () => {
   assert.deepEqual(
     selectDeploymentTargets([
@@ -40,8 +50,28 @@ test("docs and workflow-only edits do not redeploy Workers", () => {
   );
 });
 
-test("deploy compares against the last successfully deployed commit", async () => {
-  const workflow = await readFile(resolve(root, ".github/workflows/deploy.yml"), "utf8");
+test("deploy controller state is explicit and safe", async () => {
+  const migration = JSON.parse(
+    await readFile(resolve(root, "state/migration-source.json"), "utf8"),
+  );
+  const workflowPath = resolve(root, ".github/workflows/deploy.yml");
+  const statePath = resolve(root, "state/ultimo-deploy.json");
+
+  if (migration.productionDeployControllerEnabled === false) {
+    assert.equal(await isMissing(workflowPath), true,
+      "deploy.yml must stay absent while the new repository is not the production controller");
+    assert.equal(await isMissing(statePath), true,
+      "ultimo-deploy.json must be re-anchored in the new Git history before enabling deploys");
+    return;
+  }
+
+  assert.equal(migration.productionDeployControllerEnabled, true,
+    "productionDeployControllerEnabled must be an explicit boolean");
+
+  const workflow = await readFile(workflowPath, "utf8");
+  const state = JSON.parse(await readFile(statePath, "utf8"));
+  assert.equal(typeof state.commit, "string");
+  assert.ok(state.commit.length >= 40, "deployment anchor must contain a Git commit SHA");
   assert.match(workflow, /LAST=.*state\/ultimo-deploy\.json/);
   assert.match(workflow, /select-deploy-targets\.mjs --base "\$LAST" --head/);
   assert.doesNotMatch(workflow, /select-deploy-targets\.mjs --base '\$\{\{ github\.event\.before \}\}'/);
