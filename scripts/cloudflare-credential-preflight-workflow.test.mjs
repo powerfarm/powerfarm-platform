@@ -22,6 +22,14 @@ test("credential preflight can authenticate but cannot write Cloudflare", async 
     "successful preflight must disarm its own request");
   assert.match(workflow, /paths:\s*\n\s*- state\/credential-preflight-request\.json/);
   assert.match(workflow, /environment: producao/);
+
+  assert.match(workflow, /deployment\.jsonc/,
+    "Cloudflare account id must come from canonical deployment source");
+  assert.match(workflow, /cfg\?\.accountId/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID=\$ACCOUNT_ID/);
+  assert.doesNotMatch(workflow, /secrets\.CLOUDFLARE_ACCOUNT_ID/,
+    "account id is configuration, not a duplicated secret");
+
   assert.match(workflow, /CLOUDFLARE_API_TOKEN_READONLY/);
   assert.match(workflow, /secrets\.CLOUDFLARE_API_TOKEN/);
   assert.match(workflow, /check-cloudflare-api-read\.mjs --worker powerfarm-backend/);
@@ -32,6 +40,7 @@ test("credential preflight can authenticate but cannot write Cloudflare", async 
   assert.doesNotMatch(workflow, /scripts\/rollback\.mjs/);
   assert.doesNotMatch(workflow, /workers\/scripts\/[^\s]+\/content/);
 
+  assert.match(workflow, /accountIdFromDeploymentSource: true/);
   assert.match(workflow, /deploymentTokenApiRead: true/);
   assert.match(workflow, /deploymentTokenWriteScopeVerified: false/);
   assert.match(workflow, /historicalEightWorkerBaselineStillExact: true/);
