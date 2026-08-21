@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -163,13 +164,18 @@ for (const path of runtimeFilesToCheckForStarterLeak) {
   }
 }
 
+const trackedFiles = new Set(
+  execFileSync('git', ['ls-files', '-z'], { encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean),
+);
 for (const generated of [
   'powerfarm/custom-gatekeeper/worker-configuration.d.ts',
   'powerfarm/error-reporter/worker-configuration.d.ts',
   'powerfarm/gatekeeper-identity/worker-configuration.d.ts',
   'powerfarm/engine/worker-configuration.d.ts',
 ]) {
-  if (existsSync(generated)) {
+  if (trackedFiles.has(generated)) {
     throw new Error(`generated Powerfarm Worker types must not be committed as source: ${generated}`);
   }
 }
