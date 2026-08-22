@@ -34,7 +34,20 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint:fix
+
+      - name: Apply all safe automatic lint fixes
+        shell: bash
+        run: |
+          set +e
+          pnpm lint:fix
+          exit 0
+
+      - name: Print remaining lint errors with paths
+        shell: bash
+        run: |
+          set +e
+          pnpm lint:check -- --format=unix
+          exit 0
 
       - name: Commit autofixes and remove this one-shot workflow
         shell: bash
