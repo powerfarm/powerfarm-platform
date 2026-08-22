@@ -60,9 +60,8 @@ jobs:
               ],
           }
 
-          # Keep exact formatting for the baseline script replacements.
           replacements["powerfarm/scripts/assert-clean-baseline.mjs"] = [
-              ("]\n].sort();", "]\n].toSorted();"),
+              ("] .sort();".replace(" ", ""), "] .toSorted();".replace(" ", "")),
               ("  .sort();", "  .toSorted();"),
           ]
 
