@@ -1,9 +1,0 @@
-{
-  "kind": "one-time-production-activation",
-  "canonicalRuntimeBaselineCommit": "570715a75ddf40288834e0249f37e77754034511",
-  "legacyProductionSourceCommit": "60f3f34097a38a29eac6fd91ef6e5fa0958d23d4",
-  "target": "identity",
-  "targetWorker": "powerfarm-gk-identity",
-  "expectedBeforeVersionId": "a70ed8e6-8566-412d-bada-001ac54338b1",
-  "steadyStateControllerAfterSuccess": false
-}

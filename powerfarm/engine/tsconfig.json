@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ESNext", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "types": ["node", "./worker-configuration.d.ts"],
+    "noEmit": true,
+    "strict": true
+  },
+  "include": ["src", "vitest.config.ts"]
+}

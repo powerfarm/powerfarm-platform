@@ -1,0 +1,30 @@
+{
+  // Canonical Cloudflare account. Account ID is configuration, not a secret.
+  "accountId": "1f43a14fe5bb62b97e7262c5b6b7c476",
+  "publicDomain": "powerfarm.app",
+
+  "cleanInstall": {
+    // No replacement Worker may be created while the old Powerfarm Worker installation remains.
+    "requireOldPlatformRemovedBeforeCreate": true,
+    "reuseExistingWorkerDeployments": false,
+    "allowHybridOldAndNewTopology": false
+  },
+
+  "core": {
+    "source": "../packages/*/wrangler.jsonc",
+    "expectedDeployableWorkersAtPinnedUpstream": 18
+  },
+
+  "extensions": {
+    "customGatekeeper": "powerfarm-gk-custom",
+    "identity": "powerfarm-gk-identity",
+    "engine": "powerfarm-engine",
+    "errorReporter": "powerfarm-error-reporter"
+  },
+
+  "runtime": {
+    "identityIsOnlyEngineBroker": true,
+    "engineWorkersDev": false,
+    "engineSupabaseServiceRoleAllowed": false
+  }
+}

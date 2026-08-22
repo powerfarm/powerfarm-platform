@@ -1,0 +1,14 @@
+{
+  "canonicalBase": {
+    "repository": "cloudflare/cloudflare-os",
+    "commit": "b1d875034170379300e924e6fea2280852afee73",
+    "layout": "full-repository-root",
+    "expectedCoreDeployableWorkers": 18
+  },
+  "legacyProvenance": {
+    "repository": "powerfarm/OLD-platform-NAO-USAR-os",
+    "role": "backup-and-provenance-only"
+  },
+  "starterIsBase": false,
+  "reuseExistingCloudflareWorkers": false
+}

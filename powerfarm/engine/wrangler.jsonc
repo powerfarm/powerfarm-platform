@@ -1,0 +1,23 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "powerfarm-engine",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-02-02",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_do_not_populate_process_env"
+  ],
+  "workers_dev": false,
+  "define": {
+    "import.meta.url": "\"file:///worker/index.js\""
+  },
+  "ai": { "binding": "AI" },
+  "vars": {
+    "SUPABASE_URL": "https://wmsrqefgdgcijupeogfa.supabase.co",
+    "WORKERS_AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+  "rules": [
+    { "type": "Text", "globs": ["**/*.yaml"], "fallthrough": true }
+  ],
+  "observability": { "enabled": true }
+}
