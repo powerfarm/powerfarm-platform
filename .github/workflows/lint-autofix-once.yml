@@ -1,17 +1,22 @@
 name: Powerfarm lint autofix once
 
 on:
-  push:
-    branches: [baseline/full-cloudflare-os-clean]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
+
+concurrency:
+  group: powerfarm-lint-autofix-once
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: "24.19.0"
 
 jobs:
   autofix:
+    if: github.head_ref == 'baseline/full-cloudflare-os-clean'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
