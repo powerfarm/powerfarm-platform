@@ -1,0 +1,75 @@
+name: Powerfarm lint autofix once
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: powerfarm-lint-autofix-once
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24.19.0"
+
+jobs:
+  autofix:
+    if: github.head_ref == 'baseline/full-cloudflare-os-clean'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: baseline/full-cloudflare-os-clean
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply all safe automatic lint fixes
+        shell: bash
+        run: |
+          set +e
+          pnpm lint:fix
+          exit 0
+
+      - name: Print remaining lint errors with paths
+        shell: bash
+        run: |
+          set +e
+          pnpm lint:check -- --format=unix
+          exit 0
+
+      - name: Package complete patched source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=.git --exclude=node_modules --exclude='*/node_modules' -czf /tmp/powerfarm-full-source-after-lint.tgz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: powerfarm-full-source-after-lint
+          path: /tmp/powerfarm-full-source-after-lint.tgz
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Commit autofixes and remove this one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/lint-autofix-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: apply repository lint autofixes"
+          git push origin HEAD:baseline/full-cloudflare-os-clean
