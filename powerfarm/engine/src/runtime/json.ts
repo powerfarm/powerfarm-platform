@@ -9,7 +9,7 @@ export function stableJsonValue(value: unknown): unknown {
   if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .toSorted(([left], [right]) => left.localeCompare(right))
         .map(([key, child]) => [key, stableJsonValue(child)]),
     );
   }

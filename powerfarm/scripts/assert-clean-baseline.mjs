@@ -23,12 +23,12 @@ const expectedCoreWorkers = [
   'gatekeeper-zoominfo',
   'router',
   'workshop-backend',
-].sort();
+].toSorted();
 
 const actualCoreWorkers = readdirSync('packages', { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && existsSync(join('packages', entry.name, 'wrangler.jsonc')))
   .map((entry) => entry.name)
-  .sort();
+  .toSorted();
 
 if (JSON.stringify(actualCoreWorkers) !== JSON.stringify(expectedCoreWorkers)) {
   throw new Error(

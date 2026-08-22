@@ -16,10 +16,10 @@ describe("Powerfarm OAuth token refresh", () => {
       accessToken: "new-access", refreshToken: "rotated-refresh",
       expiresAt: "2026-08-20T21:00:00.000Z",
     });
-    const request = fetcher.mock.calls[0];
-    expect(request?.[0]).toBe("https://project.supabase.co/auth/v1/oauth/token");
-    expect(String((request?.[1]?.body as URLSearchParams).get("grant_type"))).toBe("refresh_token");
-    expect((request?.[1]?.headers as Record<string, string>).authorization).toMatch(/^Basic /);
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://project.supabase.co/auth/v1/oauth/token");
+    expect(String((init.body as URLSearchParams).get("grant_type"))).toBe("refresh_token");
+    expect((init.headers as Record<string, string>).authorization).toMatch(/^Basic /);
   });
 
   it("returns a sanitized reauthentication error", async () => {

@@ -120,10 +120,6 @@ function runResult(value: unknown): PowerfarmRunResult {
 }
 
 export class UserAccount extends DurableObject<Cloudflare.Env> {
-  #ler(): Estado {
-    return (this.ctx.storage.get("estado") as unknown as Estado) ?? {};
-  }
-
   async setCallback(callback: Fetcher<GatekeeperConnectCallback>,
                     initiationNonce: string, scopes: string, authOnly: boolean): Promise<void> {
     await this.ctx.storage.put("callback", callback);
