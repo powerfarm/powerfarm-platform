@@ -346,7 +346,7 @@ export class GatekeeperUserImpl
     };
   }
 
-  // Contrato: nunca lanca. Qualquer falha e "nao ha email".
+  /** Contrato: nunca lanca. Qualquer falha e "nao ha email". */
   async getAuthenticatedEmail(): Promise<string | null> {
     try { return await this.#conta().getEmail(); } catch { return null; }
   }
@@ -391,7 +391,7 @@ export class GatekeeperUserImpl
     };
   }
 
-  // Sem recursos endereçaveis, nao ha formulario de configuracao para servir.
+  /** Sem recursos endereçaveis, nao ha formulario de configuracao para servir. */
   startResourceConfigurator(_resourceUrlPattern: string): Promise<ResourceConfiguratorFrame> {
     throw new Error("PowerFarm Identity nao tem recursos endereçaveis por URL.");
   }
