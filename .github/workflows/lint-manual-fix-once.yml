@@ -1,0 +1,116 @@
+name: Powerfarm reviewed lint fixes once
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: powerfarm-reviewed-lint-fixes-once
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24.19.0"
+
+jobs:
+  fix:
+    if: github.head_ref == 'baseline/full-cloudflare-os-clean'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: baseline/full-cloudflare-os-clean
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply reviewed source fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "powerfarm/engine/src/runtime/json.ts": [
+                  (".sort(([left], [right]) => left.localeCompare(right))",
+                   ".toSorted(([left], [right]) => left.localeCompare(right))"),
+              ],
+              "powerfarm/engine/src/contracts/gadget.ts": [
+                  (".sort(([left], [right]) => left.localeCompare(right))",
+                   ".toSorted(([left], [right]) => left.localeCompare(right))"),
+              ],
+              "powerfarm/engine/src/runtime/session-service.ts": [
+                  (".sort(([left], [right]) => left.localeCompare(right))",
+                   ".toSorted(([left], [right]) => left.localeCompare(right))"),
+              ],
+              "powerfarm/scripts/assert-clean-baseline.mjs": [
+                  ("] .sort();", "] .toSorted();"),
+              ],
+          }
+
+          # Keep exact formatting for the baseline script replacements.
+          replacements["powerfarm/scripts/assert-clean-baseline.mjs"] = [
+              ("]\n].sort();", "]\n].toSorted();"),
+              ("  .sort();", "  .toSorted();"),
+          ]
+
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              text = path.read_text()
+              for old, new in pairs:
+                  if old not in text:
+                      raise SystemExit(f"expected lint target not found in {filename}: {old!r}")
+                  text = text.replace(old, new)
+              path.write_text(text)
+
+          oauth = Path("powerfarm/gatekeeper-identity/src/oauth-refresh.test.ts")
+          text = oauth.read_text()
+          old = '''    const request = fetcher.mock.calls[0];\n    expect(request?.[0]).toBe("https://project.supabase.co/auth/v1/oauth/token");\n    expect(String((request?.[1]?.body as URLSearchParams).get("grant_type"))).toBe("refresh_token");\n    expect((request?.[1]?.headers as Record<string, string>).authorization).toMatch(/^Basic /);\n'''
+          new = '''    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];\n    expect(url).toBe("https://project.supabase.co/auth/v1/oauth/token");\n    expect(String((init.body as URLSearchParams).get("grant_type"))).toBe("refresh_token");\n    expect((init.headers as Record<string, string>).authorization).toMatch(/^Basic /);\n'''
+          if old not in text:
+              raise SystemExit("expected OAuth lint target not found")
+          oauth.write_text(text.replace(old, new))
+
+          identity = Path("powerfarm/gatekeeper-identity/src/identity.ts")
+          text = identity.read_text()
+          old = '''  #ler(): Estado {\n    return (this.ctx.storage.get("estado") as unknown as Estado) ?? {};\n  }\n\n'''
+          if old not in text:
+              raise SystemExit("expected unused #ler method not found")
+          identity.write_text(text.replace(old, ""))
+          PY
+
+      - name: Verify tracked-source lint
+        run: pnpm lint:check -- --format=unix
+
+      - name: Verify affected Powerfarm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @powerfarm/engine test
+          pnpm --filter gatekeeper-identity test
+          node powerfarm/scripts/assert-clean-baseline.mjs
+          git diff --check
+
+      - name: Commit reviewed fixes and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/lint-manual-fix-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: satisfy Powerfarm lint invariants"
+          git push origin HEAD:baseline/full-cloudflare-os-clean
